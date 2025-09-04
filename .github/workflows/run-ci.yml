@@ -19,18 +19,6 @@ jobs:
         with:
           toolchain: stable
           override: true
-          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu
-
-      # Step 2a: Install cross-compilation tools
-      - name: Install cross-compilation tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      # Step 2b: Set up cross-compilation environment
-      - name: Set up cross-compilation environment
-        run: |
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
       # Step 3: Install Docker Compose dependencies (if needed)
       - name: Install Docker Compose and utilities
@@ -65,24 +53,20 @@ jobs:
       - name: Build and parse project
         run: ./scripts/buildNparse.sh
 
-      # Step 8: Build nodeagent binaries for release
-      - name: Build nodeagent binaries (AMD64 and ARM64)
+      # Step 8: Build nodeagent binary for release (x86_64 only)
+      - name: Build nodeagent binary (x86_64)
         run: |
           echo "Building nodeagent for x86_64-unknown-linux-gnu..."
           cd src/agent/nodeagent
-          cargo build --release --target x86_64-unknown-linux-gnu
+          cargo build --release
           
-          echo "Building nodeagent for aarch64-unknown-linux-gnu..."
-          cargo build --release --target aarch64-unknown-linux-gnu
-          
-          # Copy binaries to dist folder
+          # Copy binary to dist folder
           cd ../../../
-          cp src/agent/nodeagent/target/x86_64-unknown-linux-gnu/release/nodeagent dist/binaries/nodeagent-linux-amd64
-          cp src/agent/nodeagent/target/aarch64-unknown-linux-gnu/release/nodeagent dist/binaries/nodeagent-linux-arm64
+          cp src/agent/nodeagent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
           
-          # Verify binaries were created
+          # Verify binary was created
           ls -la dist/binaries/
-          file dist/binaries/nodeagent-linux-*
+          file dist/binaries/nodeagent-linux-amd64
 
       # Step 9: Run all Rust unit/integration tests and generate reports
       - name: Run tests and generate report
@@ -130,13 +114,13 @@ jobs:
           name: test-report
           path: dist/tests/*
 
-      # Step 17: Upload nodeagent binaries
-      - name: Upload nodeagent binaries
+      # Step 17: Upload nodeagent binary
+      - name: Upload nodeagent binary
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nodeagent-binaries
-          path: dist/binaries/nodeagent-linux-*
+          name: nodeagent-binary
+          path: dist/binaries/nodeagent-linux-amd64
 
       # Step 18: Upload test coverage reports
       - name: Upload Overall coverage reports
