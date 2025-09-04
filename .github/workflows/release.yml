@@ -116,11 +116,11 @@ jobs:
           name: license-report
           path: dist/licenses/
 
-      # Download nodeagent binaries
-      - name: Download nodeagent binaries
+      # Download nodeagent binary
+      - name: Download nodeagent binary
         uses: actions/download-artifact@v4
         with:
-          name: nodeagent-binaries
+          name: nodeagent-binary
           path: dist/binaries/
 
       # Upload all reports as GitHub Release assets
@@ -206,7 +206,7 @@ jobs:
           file_glob: true
           tag: ${{ github.ref }}
 
-      # Upload nodeagent binaries to release
+      # Upload nodeagent binary to release
       - name: Upload nodeagent binary (Linux AMD64) to release
         uses: svenstaro/upload-release-action@v2
         id: upload_nodeagent_amd64
