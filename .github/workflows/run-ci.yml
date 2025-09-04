@@ -56,17 +56,21 @@ jobs:
       # Step 8: Build nodeagent binary for release (x86_64 only)
       - name: Build nodeagent binary (x86_64)
         run: |
-          echo "Building nodeagent from project root..."
+          echo "Building nodeagent from src/agent/nodeagent directory..."
           
-          # Build from project root using workspace
-          cargo build --release --bin nodeagent
+          # Build from the nodeagent package directory
+          cd src/agent/nodeagent
+          cargo build --release
           
-          # Check if binary exists in project root target
-          if [ -f "target/release/nodeagent" ]; then
-            echo "Found binary at: target/release/nodeagent"
-            cp target/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          # Go back to project root
+          cd ../../../
+          
+          # The binary should be at src/agent/target/release/nodeagent (based on your output)
+          if [ -f "src/agent/target/release/nodeagent" ]; then
+            echo "Found binary at: src/agent/target/release/nodeagent"
+            cp src/agent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
           else
-            echo "Binary not found in target/release/, searching..."
+            echo "Binary not found, searching entire project..."
             find . -name "nodeagent" -type f -executable
             exit 1
           fi
