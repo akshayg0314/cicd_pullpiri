@@ -3,9 +3,10 @@
 //! This file sets up the asynchronous runtime, initializes the manager and gRPC server,
 //! and launches both concurrently. It also provides unit tests for initialization.
 
-use common::monitoringserver::ContainerList;
+use common::monitoringserver::{ContainerList, NodeInfo};
 pub mod grpc;
 pub mod manager;
+pub mod data_structures; // Add this line
 
 use common::monitoringserver::monitoring_server_connection_server::MonitoringServerConnectionServer;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -14,8 +15,8 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 ///
 /// This function creates the manager, initializes it, and then runs it.
 /// If initialization or running fails, errors are printed to stderr.
-async fn launch_manager(rx_grpc: Receiver<ContainerList>) {
-    let mut manager = manager::MonitoringServerManager::new(rx_grpc).await;
+async fn launch_manager(rx_container: Receiver<ContainerList>, rx_node: Receiver<NodeInfo>) {
+    let mut manager = manager::MonitoringServerManager::new(rx_container, rx_node).await;
 
     match manager.initialize().await {
         Ok(_) => {
@@ -33,11 +34,12 @@ async fn launch_manager(rx_grpc: Receiver<ContainerList>) {
 /// Initializes the MonitoringServer gRPC server.
 ///
 /// Sets up the gRPC service and starts listening for incoming requests.
-async fn initialize(tx_grpc: Sender<ContainerList>) {
+async fn initialize(tx_container: Sender<ContainerList>, tx_node: Sender<NodeInfo>) {
     use tonic::transport::Server;
 
     let server = grpc::receiver::MonitoringServerReceiver {
-        tx: tx_grpc.clone(),
+        tx_container,
+        tx_node,
     };
 
     let addr = common::monitoringserver::open_server()
@@ -45,19 +47,24 @@ async fn initialize(tx_grpc: Sender<ContainerList>) {
         .expect("monitoringserver address parsing error");
     println!("MonitoringServer listening on {}", addr);
 
-    let _ = Server::builder()
+    if let Err(e) = Server::builder()
         .add_service(MonitoringServerConnectionServer::new(server))
         .serve(addr)
-        .await;
+        .await
+    {
+        eprintln!("gRPC server error: {}", e);
+    }
 }
 
 #[tokio::main]
 async fn main() {
     println!("Starting MonitoringServer...");
 
-    let (tx_grpc, rx_grpc) = channel::<ContainerList>(100);
-    let mgr = launch_manager(rx_grpc);
-    let grpc = initialize(tx_grpc);
+    let (tx_container, rx_container) = channel::<ContainerList>(100);
+    let (tx_node, rx_node) = channel::<NodeInfo>(100);
+
+    let mgr = launch_manager(rx_container, rx_node);
+    let grpc = initialize(tx_container, tx_node);
 
     tokio::join!(mgr, grpc);
 }

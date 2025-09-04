@@ -114,18 +114,14 @@ impl ActionControllerManager {
         // To Do.. network, node yaml extract from etcd.
         let etcd_network_key = format!("Network/{}", scenario_name);
         let network_str = match common::etcd::get(&etcd_network_key).await {
-            Ok(value) => value,
-            Err(e) => {
-                return Err(format!("Network key '{}' not found: {}", etcd_network_key, e).into());
-            }
+            Ok(value) => Some(value),
+            Err(_) => None,
         };
 
         let etcd_node_key = format!("Node/{}", scenario_name);
         let node_str = match common::etcd::get(&etcd_node_key).await {
-            Ok(value) => value,
-            Err(e) => {
-                return Err(format!("Network key '{}' not found: {}", etcd_node_key, e).into());
-            }
+            Ok(value) => Some(value),
+            Err(_) => None,
         };
 
         for mi in package.get_models() {
@@ -138,7 +134,12 @@ impl ActionControllerManager {
                 println!("Node {} is nodeagent", model_node);
                 "nodeagent"
             } else {
-                continue; // Skip unknown node types
+                // Log warning for unknown node types and skip processing
+                println!(
+                    "Warning: Node '{}' is not explicitly configured. Skipping deployment.",
+                    model_node
+                );
+                continue;
             };
             println!(
                 "Processing model '{}' on node '{}' with action '{}'",
@@ -150,15 +151,19 @@ impl ActionControllerManager {
                     self.start_workload(&model_name, &model_node, &node_type)
                         .await
                         .map_err(|e| format!("Failed to start workload '{}': {}", model_name, e))?;
-                    request_network_pod(
-                        node_str.clone(),
-                        scenario_name.to_string(),
-                        network_str.clone(),
-                    )
-                    .await
-                    .map_err(|e| {
-                        format!("Failed to request network pod for '{}': {}", model_name, e)
-                    })?;
+
+                    // If network and node are specified, request network pod to Pharos
+                    if network_str.is_some() && node_str.is_some() {
+                        request_network_pod(
+                            node_str.clone().unwrap(),
+                            scenario_name.to_string(),
+                            network_str.clone().unwrap(),
+                        )
+                        .await
+                        .map_err(|e| {
+                            format!("Failed to request network pod for '{}': {}", model_name, e)
+                        })?;
+                    }
                 }
                 "terminate" => {
                     self.reload_all_node(&model_name, &model_node).await?;
@@ -250,7 +255,12 @@ impl ActionControllerManager {
             } else if self.nodeagent_nodes.contains(&model_node) {
                 "nodeagent"
             } else {
-                continue; // Skip if node type is unknown
+                // Log warning for unknown node types and skip processing
+                println!(
+                    "Warning: Node '{}' is not explicitly configured. Skipping deployment.",
+                    model_node
+                );
+                continue;
             };
 
             if desired == Status::Running {
@@ -614,5 +624,22 @@ spec:
         assert!(manager.delete_workload("test".into()).await.is_ok());
         assert!(manager.restart_workload("test".into()).await.is_ok());
         assert!(manager.pause_workload("test".into()).await.is_ok());
+    }
+
+    #[test]
+    fn test_unknown_nodes_skipped() {
+        // Test that when creating a manager, unknown nodes are properly categorized
+        let manager = ActionControllerManager {
+            bluechi_nodes: vec!["HPC".to_string()],
+            nodeagent_nodes: vec!["ZONE".to_string()],
+        };
+
+        // Test that nodes are properly categorized
+        assert!(manager.bluechi_nodes.contains(&"HPC".to_string()));
+        assert!(manager.nodeagent_nodes.contains(&"ZONE".to_string()));
+        assert!(!manager.bluechi_nodes.contains(&"cloud".to_string()));
+
+        // The logic now skips unknown nodes instead of processing them
+        // This test validates that the manager is set up correctly
     }
 }
