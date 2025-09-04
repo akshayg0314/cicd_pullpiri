@@ -4,9 +4,9 @@
 //! and launches both concurrently. It also provides unit tests for initialization.
 
 use common::monitoringserver::{ContainerList, NodeInfo};
+pub mod data_structures;
 pub mod grpc;
-pub mod manager;
-pub mod data_structures; // Add this line
+pub mod manager; // Add this line
 
 use common::monitoringserver::monitoring_server_connection_server::MonitoringServerConnectionServer;
 use tokio::sync::mpsc::{channel, Receiver, Sender};

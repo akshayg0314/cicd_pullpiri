@@ -72,8 +72,8 @@ impl DataStore {
         let ip = node_info.ip.clone();
 
         // Validate IP format
-        let _parsed_ip = Ipv4Addr::from_str(&ip)
-            .map_err(|_| format!("Invalid IP address format: {}", ip))?;
+        let _parsed_ip =
+            Ipv4Addr::from_str(&ip).map_err(|_| format!("Invalid IP address format: {}", ip))?;
 
         // Generate IDs
         let soc_id = Self::generate_soc_id(&ip)?;
@@ -96,34 +96,40 @@ impl DataStore {
     /// e.g., 192.168.10.201 and 192.168.10.202 -> same SoC
     /// e.g., 192.168.10.201 and 192.168.10.211 -> different SoC
     pub fn generate_soc_id(ip: &str) -> Result<String, String> {
-        let parsed_ip = Ipv4Addr::from_str(ip)
-            .map_err(|_| format!("Invalid IP address: {}", ip))?;
-        
+        let parsed_ip =
+            Ipv4Addr::from_str(ip).map_err(|_| format!("Invalid IP address: {}", ip))?;
+
         let octets = parsed_ip.octets();
         let last_octet = octets[3];
         let soc_group = (last_octet / 10) * 10; // Groups by tens (200-209, 210-219, etc.)
-        
-        Ok(format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], soc_group))
+
+        Ok(format!(
+            "{}.{}.{}.{}",
+            octets[0], octets[1], octets[2], soc_group
+        ))
     }
 
     /// Generates Board ID based on IP address
     /// Same board: same first 3 octets + same hundreds place of last octet
     /// e.g., 192.168.10.201, 192.168.10.202, 192.168.10.222 -> same board
     pub fn generate_board_id(ip: &str) -> Result<String, String> {
-        let parsed_ip = Ipv4Addr::from_str(ip)
-            .map_err(|_| format!("Invalid IP address: {}", ip))?;
-        
+        let parsed_ip =
+            Ipv4Addr::from_str(ip).map_err(|_| format!("Invalid IP address: {}", ip))?;
+
         let octets = parsed_ip.octets();
         let last_octet = octets[3];
         let board_group = (last_octet / 100) * 100; // Groups by hundreds (200-299, 300-399, etc.)
-        
-        Ok(format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], board_group))
+
+        Ok(format!(
+            "{}.{}.{}.{}",
+            octets[0], octets[1], octets[2], board_group
+        ))
     }
 
     /// Updates or creates SocInfo with the given node
     fn update_soc_info(&mut self, soc_id: String, node_info: NodeInfo) -> Result<(), String> {
         let current_time = std::time::SystemTime::now();
-        
+
         if let Some(soc_info) = self.socs.get_mut(&soc_id) {
             // Update existing SocInfo
             soc_info.update_with_node(node_info);
@@ -133,14 +139,14 @@ impl DataStore {
             let soc_info = SocInfo::new(soc_id.clone(), node_info);
             self.socs.insert(soc_id, soc_info);
         }
-        
+
         Ok(())
     }
 
     /// Updates or creates BoardInfo with the given node
     fn update_board_info(&mut self, board_id: String, node_info: NodeInfo) -> Result<(), String> {
         let current_time = std::time::SystemTime::now();
-        
+
         if let Some(board_info) = self.boards.get_mut(&board_id) {
             // Update existing BoardInfo
             board_info.update_with_node(node_info);
@@ -153,14 +159,16 @@ impl DataStore {
 
         // **NEW**: Update SoCs list in BoardInfo
         self.update_board_socs(&board_id)?;
-        
+
         Ok(())
     }
 
     /// Updates the SoCs list in a BoardInfo based on current SoCs
     fn update_board_socs(&mut self, board_id: &str) -> Result<(), String> {
         // Find all SoCs that belong to this board
-        let board_socs: Vec<SocInfo> = self.socs.values()
+        let board_socs: Vec<SocInfo> = self
+            .socs
+            .values()
             .filter(|soc| {
                 // Check if this SoC belongs to the board
                 if let Ok(soc_board_id) = Self::generate_board_id_from_soc_id(&soc.soc_id) {
@@ -245,7 +253,11 @@ impl SocInfo {
     /// Updates SocInfo with a new or updated node
     pub fn update_with_node(&mut self, node_info: NodeInfo) {
         // Find and update existing node or add new one
-        if let Some(existing_node) = self.nodes.iter_mut().find(|n| n.node_name == node_info.node_name) {
+        if let Some(existing_node) = self
+            .nodes
+            .iter_mut()
+            .find(|n| n.node_name == node_info.node_name)
+        {
             *existing_node = node_info.clone();
         } else {
             self.nodes.push(node_info.clone());
@@ -258,7 +270,7 @@ impl SocInfo {
     /// Recalculates all total values from current nodes
     fn recalculate_totals(&mut self) {
         let node_count = self.nodes.len() as f64;
-        
+
         if node_count > 0.0 {
             // Average CPU and memory usage across nodes
             self.total_cpu_usage = self.nodes.iter().map(|n| n.cpu_usage).sum::<f64>() / node_count;
@@ -267,7 +279,7 @@ impl SocInfo {
             self.total_cpu_usage = 0.0;
             self.total_mem_usage = 0.0;
         }
-        
+
         // Sum all other metrics across nodes
         self.total_cpu_count = self.nodes.iter().map(|n| n.cpu_count).sum();
         self.total_gpu_count = self.nodes.iter().map(|n| n.gpu_count).sum();
@@ -308,7 +320,11 @@ impl BoardInfo {
     /// Updates BoardInfo with a new or updated node
     pub fn update_with_node(&mut self, node_info: NodeInfo) {
         // Find and update existing node or add new one
-        if let Some(existing_node) = self.nodes.iter_mut().find(|n| n.node_name == node_info.node_name) {
+        if let Some(existing_node) = self
+            .nodes
+            .iter_mut()
+            .find(|n| n.node_name == node_info.node_name)
+        {
             *existing_node = node_info.clone();
         } else {
             self.nodes.push(node_info.clone());
@@ -321,7 +337,7 @@ impl BoardInfo {
     /// Recalculates all total values from current nodes
     fn recalculate_totals(&mut self) {
         let node_count = self.nodes.len() as f64;
-        
+
         if node_count > 0.0 {
             // Average CPU and memory usage across nodes
             self.total_cpu_usage = self.nodes.iter().map(|n| n.cpu_usage).sum::<f64>() / node_count;
@@ -330,8 +346,8 @@ impl BoardInfo {
             self.total_cpu_usage = 0.0;
             self.total_mem_usage = 0.0;
         }
-        
-        // Sum all other metrics across nodes  
+
+        // Sum all other metrics across nodes
         self.total_cpu_count = self.nodes.iter().map(|n| n.cpu_count).sum();
         self.total_gpu_count = self.nodes.iter().map(|n| n.gpu_count).sum();
         self.total_used_memory = self.nodes.iter().map(|n| n.used_memory).sum();
