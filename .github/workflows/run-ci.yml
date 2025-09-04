@@ -60,9 +60,26 @@ jobs:
           cd src/agent/nodeagent
           cargo build --release
           
-          # Copy binary to dist folder
+          # Debug: Check what was actually built
+          echo "Checking target directory structure:"
+          find target -name "nodeagent" -type f 2>/dev/null || echo "No nodeagent binary found in target/"
+          ls -la target/release/ || echo "No release directory found"
+          
+          # Go back to project root
           cd ../../../
-          cp src/agent/nodeagent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          
+          # Try different possible locations for the binary
+          if [ -f "src/agent/nodeagent/target/release/nodeagent" ]; then
+            echo "Found binary at: src/agent/nodeagent/target/release/nodeagent"
+            cp src/agent/nodeagent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          elif [ -f "target/release/nodeagent" ]; then
+            echo "Found binary at: target/release/nodeagent"
+            cp target/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          else
+            echo "Binary not found, searching entire project..."
+            find . -name "nodeagent" -type f -executable
+            exit 1
+          fi
           
           # Verify binary was created
           ls -la dist/binaries/
