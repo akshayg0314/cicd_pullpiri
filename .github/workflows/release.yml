@@ -28,67 +28,7 @@ jobs:
   run-license-report:
     uses: ./.github/workflows/run-license-check.yml
 
-  # Step 5: Build nodeagent binary for release
-  build-nodeagent-binary:
-    name: Build nodeagent binary
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    
-    strategy:
-      matrix:
-        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-      
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-      
-      - name: Install project dependencies
-        run: |
-          chmod +x scripts/installdeps.sh
-          ./scripts/installdeps.sh
-      
-      - name: Build nodeagent binary
-        run: |
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-            export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar
-          fi
-          cargo build --release --manifest-path=src/agent/nodeagent/Cargo.toml --target=${{ matrix.target }}
-      
-      - name: Create release directory
-        run: mkdir -p release-artifacts
-      
-      - name: Copy and rename binary
-        run: |
-          TARGET_DIR="target/${{ matrix.target }}/release"
-          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-gnu" ]; then
-            cp "$TARGET_DIR/nodeagent" "release-artifacts/nodeagent-linux-amd64"
-          elif [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            cp "$TARGET_DIR/nodeagent" "release-artifacts/nodeagent-linux-arm64"
-          fi
-      
-      - name: Upload nodeagent binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nodeagent-${{ matrix.target }}
-          path: release-artifacts/nodeagent-*
-
-  # Step 6: Collect all generated artifacts and publish to GitHub Release
+  # Step 5: Collect all generated artifacts and publish to GitHub Release
   tag_release_artifacts:
     name: Collect and upload release artifacts
     runs-on: ubuntu-latest
@@ -102,7 +42,6 @@ jobs:
       - run-doc-lint
       - run-yaml-validation
       - run-license-report
-      - build-nodeagent-binary
 
     permissions: write-all
 
@@ -178,16 +117,10 @@ jobs:
           path: dist/licenses/
 
       # Download nodeagent binaries
-      - name: Download nodeagent binary (x86_64)
+      - name: Download nodeagent binaries
         uses: actions/download-artifact@v4
         with:
-          name: nodeagent-x86_64-unknown-linux-gnu
-          path: dist/binaries/
-
-      - name: Download nodeagent binary (aarch64)
-        uses: actions/download-artifact@v4
-        with:
-          name: nodeagent-aarch64-unknown-linux-gnu
+          name: nodeagent-binaries
           path: dist/binaries/
 
       # Upload all reports as GitHub Release assets
