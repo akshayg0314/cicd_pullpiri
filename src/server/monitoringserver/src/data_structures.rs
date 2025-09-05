@@ -4,10 +4,10 @@
  */
 
 use common::monitoringserver::NodeInfo;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 
 /// Aggregated information from multiple nodes on the same SoC
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,8 +95,8 @@ impl DataStore {
         let ip = node_info.ip.clone();
 
         // Validate IP format
-        let _parsed_ip = Ipv4Addr::from_str(&ip)
-            .map_err(|_| format!("Invalid IP address format: {}", ip))?;
+        let _parsed_ip =
+            Ipv4Addr::from_str(&ip).map_err(|_| format!("Invalid IP address format: {}", ip))?;
 
         // Generate IDs based on IP grouping rules
         let soc_id = Self::generate_soc_id(&ip)?;
@@ -134,7 +134,10 @@ impl DataStore {
 
         // Log warning if etcd operations failed but don't fail the entire operation
         if !etcd_errors.is_empty() {
-            eprintln!("[ETCD] Warning: {} etcd operations failed", etcd_errors.len());
+            eprintln!(
+                "[ETCD] Warning: {} etcd operations failed",
+                etcd_errors.len()
+            );
         }
 
         Ok(())
@@ -294,8 +297,19 @@ impl SocInfo {
 
     /// Recalculates aggregated values from current nodes
     fn recalculate_totals(&mut self) {
-        let (cpu_usage, mem_usage, used_memory, total_memory, cpu_count, gpu_count, rx_bytes, tx_bytes, read_bytes, write_bytes) = self.calculate_aggregated_values();
-        
+        let (
+            cpu_usage,
+            mem_usage,
+            used_memory,
+            total_memory,
+            cpu_count,
+            gpu_count,
+            rx_bytes,
+            tx_bytes,
+            read_bytes,
+            write_bytes,
+        ) = self.calculate_aggregated_values();
+
         self.total_cpu_usage = cpu_usage;
         self.total_mem_usage = mem_usage;
         self.total_used_memory = used_memory;
@@ -350,8 +364,19 @@ impl BoardInfo {
 
     /// Recalculates aggregated values from current nodes
     fn recalculate_totals(&mut self) {
-        let (cpu_usage, mem_usage, used_memory, total_memory, cpu_count, gpu_count, rx_bytes, tx_bytes, read_bytes, write_bytes) = self.calculate_aggregated_values();
-        
+        let (
+            cpu_usage,
+            mem_usage,
+            used_memory,
+            total_memory,
+            cpu_count,
+            gpu_count,
+            rx_bytes,
+            tx_bytes,
+            read_bytes,
+            write_bytes,
+        ) = self.calculate_aggregated_values();
+
         self.total_cpu_usage = cpu_usage;
         self.total_mem_usage = mem_usage;
         self.total_used_memory = used_memory;
@@ -368,7 +393,7 @@ impl BoardInfo {
 /// Helper trait for calculating aggregated metrics
 trait AggregatedMetrics {
     fn get_nodes(&self) -> &Vec<NodeInfo>;
-    
+
     fn calculate_aggregated_values(&self) -> (f64, f64, u64, u64, u64, u64, u64, u64, u64, u64) {
         let nodes = self.get_nodes();
         let node_count = nodes.len() as f64;
@@ -382,15 +407,26 @@ trait AggregatedMetrics {
             } else {
                 0.0
             };
-            
+
             let cpu_count = nodes.iter().map(|n| n.cpu_count).sum();
             let gpu_count = nodes.iter().map(|n| n.gpu_count).sum();
             let rx_bytes = nodes.iter().map(|n| n.rx_bytes).sum();
             let tx_bytes = nodes.iter().map(|n| n.tx_bytes).sum();
             let read_bytes = nodes.iter().map(|n| n.read_bytes).sum();
             let write_bytes = nodes.iter().map(|n| n.write_bytes).sum();
-            
-            (cpu_usage, mem_usage, used_memory, total_memory, cpu_count, gpu_count, rx_bytes, tx_bytes, read_bytes, write_bytes)
+
+            (
+                cpu_usage,
+                mem_usage,
+                used_memory,
+                total_memory,
+                cpu_count,
+                gpu_count,
+                rx_bytes,
+                tx_bytes,
+                read_bytes,
+                write_bytes,
+            )
         } else {
             (0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0)
         }

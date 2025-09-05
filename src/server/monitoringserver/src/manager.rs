@@ -69,13 +69,17 @@ impl MonitoringServerManager {
     async fn handle_node_info(&self, node_info: NodeInfo) {
         // Print detailed NodeInfo first
         self.print_node_info(&node_info);
-        
+
         // Store NodeInfo and update SocInfo/BoardInfo with etcd storage
         {
             let mut data_store = self.data_store.lock().await;
-            match data_store.store_node_info(node_info.clone()).await {  // Add .await here
+            match data_store.store_node_info(node_info.clone()).await {
+                // Add .await here
                 Ok(_) => {
-                    println!("[MonitoringServer] SUCCESS: Successfully stored NodeInfo for {}", node_info.node_name);
+                    println!(
+                        "[MonitoringServer] SUCCESS: Successfully stored NodeInfo for {}",
+                        node_info.node_name
+                    );
 
                     // Print ID generation details
                     self.print_id_generation_details(&node_info.ip);
@@ -94,7 +98,7 @@ impl MonitoringServerManager {
                 }
             }
         }
-        
+
         println!("{}", "=".repeat(80));
     }
 

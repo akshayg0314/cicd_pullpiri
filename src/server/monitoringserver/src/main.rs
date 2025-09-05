@@ -5,9 +5,9 @@
 
 use common::monitoringserver::{ContainerList, NodeInfo};
 pub mod data_structures;
+pub mod etcd_storage;
 pub mod grpc;
 pub mod manager;
-pub mod etcd_storage;
 
 use common::monitoringserver::monitoring_server_connection_server::MonitoringServerConnectionServer;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
