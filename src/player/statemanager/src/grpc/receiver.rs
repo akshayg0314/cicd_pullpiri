@@ -38,7 +38,7 @@ use common::statemanager::{
     StateChangeResponse,
 };
 use tokio::sync::mpsc;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Status};
 
 /// StateManager gRPC service handler.
 ///
@@ -66,9 +66,7 @@ pub struct StateManagerReceiver {
 impl StateManagerConnection for StateManagerReceiver {
     /// Stream type for state change event subscriptions.
     /// Uses ReceiverStream to provide async streaming of state change events to subscribers.
-
-    ///type SubscribeToStateChangesStream = ReceiverStream<Result<StateChangeEvent, Status>>;
-
+    /// type SubscribeToStateChangesStream = ReceiverStream<Result<StateChangeEvent, Status>>;
     /// Handles action requests (legacy implementation).
     ///
     /// # Arguments
@@ -124,7 +122,7 @@ impl StateManagerConnection for StateManagerReceiver {
             })),
             Err(e) => Err(tonic::Status::new(
                 tonic::Code::Unavailable,
-                format!("cannot send changed container list: {}", e),
+                format!("cannot send changed container list: {e}"),
             )),
         }
     }
@@ -175,7 +173,7 @@ impl StateManagerConnection for StateManagerReceiver {
         // Comprehensive validation of StateChange message
         if let Err(validation_error) = self.validate_state_change(&req) {
             return Ok(tonic::Response::new(StateChangeResponse {
-                message: format!("StateChange validation failed: {}", validation_error),
+                message: format!("StateChange validation failed: {validation_error}"),
                 transition_id, // Preserve original ID even for validation failures
                 timestamp_ns: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -217,7 +215,7 @@ impl StateManagerConnection for StateManagerReceiver {
             }
             Err(e) => {
                 // Channel send failed - StateManager unavailable or overloaded
-                eprintln!("Failed to forward StateChange to StateManager: {}", e);
+                eprintln!("Failed to forward StateChange to StateManager: {e}");
                 Ok(tonic::Response::new(StateChangeResponse {
                     message: "StateManager service unavailable".to_string(),
                     transition_id, // Preserve original ID for tracking
@@ -226,7 +224,7 @@ impl StateManagerConnection for StateManagerReceiver {
                         .unwrap_or_default()
                         .as_nanos() as i64,
                     error_code: ErrorCode::ResourceUnavailable as i32,
-                    error_details: format!("Cannot forward StateChange to StateManager: {}", e),
+                    error_details: format!("Cannot forward StateChange to StateManager: {e}"),
                 }))
             }
         }
@@ -254,7 +252,7 @@ impl StateManagerReceiver {
     /// - timestamp_ns must be positive
     fn validate_state_change(&self, state_change: &StateChange) -> Result<(), String> {
         // Validate resource type enum
-        if let Err(_) = ResourceType::try_from(state_change.resource_type) {
+        if ResourceType::try_from(state_change.resource_type).is_err() {
             return Err(format!(
                 "Invalid resource_type: {}",
                 state_change.resource_type

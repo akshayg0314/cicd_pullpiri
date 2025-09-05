@@ -444,7 +444,7 @@ impl StateMachine {
                     state_change.resource_type,
                 ),
                 error_code: ErrorCode::InvalidRequest,
-                message: format!("Invalid state change request: {}", validation_error),
+                message: format!("Invalid state change request: {validation_error}"),
                 actions_to_execute: vec![],
                 transition_id: state_change.transition_id.clone(),
                 error_details: validation_error,
@@ -476,7 +476,7 @@ impl StateMachine {
 
         // Get current state - use provided current_state for new resources
         let current_state = match self.resource_states.get(&resource_key) {
-            Some(existing_state) => existing_state.current_state.clone(),
+            Some(existing_state) => existing_state.current_state,
             None => Self::state_str_to_enum(
                 state_change.current_state.as_str(),
                 state_change.resource_type,
@@ -524,10 +524,10 @@ impl StateMachine {
                     return TransitionResult {
                         new_state: current_state,
                         error_code: ErrorCode::PreconditionFailed,
-                        message: format!("Condition not met: {}", condition),
+                        message: format!("Condition not met: {condition}"),
                         actions_to_execute: vec![],
                         transition_id: state_change.transition_id.clone(),
-                        error_details: format!("Failed condition evaluation: {}", condition),
+                        error_details: format!("Failed condition evaluation: {condition}"),
                     };
                 }
             }
@@ -552,18 +552,18 @@ impl StateMachine {
 
                 // Send action for async execution (non-blocking)
                 if let Err(e) = sender.send(action_command) {
-                    eprintln!("Warning: Failed to queue action for execution: {}", e);
+                    eprintln!("Warning: Failed to queue action for execution: {e}");
                 }
             }
 
             let transitioned_state_str = match resource_type {
-                ResourceType::Scenario => ScenarioState::from_i32(transition.to_state)
+                ResourceType::Scenario => ScenarioState::try_from(transition.to_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Package => PackageState::from_i32(transition.to_state)
+                ResourceType::Package => PackageState::try_from(transition.to_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Model => ModelState::from_i32(transition.to_state)
+                ResourceType::Model => ModelState::try_from(transition.to_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
                 _ => "UNKNOWN",
@@ -571,9 +571,9 @@ impl StateMachine {
 
             // Create successful transition result
             let transition_result = TransitionResult {
-                new_state: transition.to_state.clone(),
+                new_state: transition.to_state,
                 error_code: ErrorCode::Success,
-                message: format!("Successfully transitioned to {}", transitioned_state_str),
+                message: format!("Successfully transitioned to {transitioned_state_str}"),
                 actions_to_execute: vec![transition.action.clone()],
                 transition_id: state_change.transition_id.clone(),
                 error_details: String::new(),
@@ -590,13 +590,13 @@ impl StateMachine {
             transition_result
         } else {
             let current_state_str = match resource_type {
-                ResourceType::Scenario => ScenarioState::from_i32(current_state)
+                ResourceType::Scenario => ScenarioState::try_from(current_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Package => PackageState::from_i32(current_state)
+                ResourceType::Package => PackageState::try_from(current_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Model => ModelState::from_i32(current_state)
+                ResourceType::Model => ModelState::try_from(current_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
                 _ => "UNKNOWN",
@@ -646,17 +646,15 @@ impl StateMachine {
             };
 
             let transition_result = TransitionResult {
-                new_state: current_state.clone(),
+                new_state: current_state,
                 error_code: ErrorCode::InvalidStateTransition,
                 message: format!(
-                    "No valid transition from {} to {} for resource type {:?}",
-                    current_state_str, target_state_str, resource_type
+                    "No valid transition from {current_state_str} to {target_state_str} for resource type {resource_type:?}",
                 ),
                 actions_to_execute: vec![],
                 transition_id: state_change.transition_id.clone(),
                 error_details: format!(
-                    "Invalid state transition attempted: {} -> {}",
-                    current_state_str, target_state_str
+                    "Invalid state transition attempted: {current_state_str} -> {target_state_str}"
                 ),
             };
 
@@ -730,7 +728,7 @@ impl StateMachine {
 
     /// Generate a unique resource key
     fn generate_resource_key(&self, resource_type: ResourceType, resource_name: &str) -> String {
-        format!("{:?}::{}", resource_type, resource_name)
+        format!("{resource_type:?}::{resource_name}")
     }
 
     /// Build context for action execution
@@ -855,7 +853,7 @@ impl StateMachine {
                 {
                     "policy_verification_failure".to_string()
                 }
-                _ => format!("transition_{}_{}", current_state, target_state),
+                _ => format!("transition_{current_state}_{target_state}"),
             },
             ResourceType::Package => match (current_state, target_state) {
                 (x, y)
@@ -925,7 +923,7 @@ impl StateMachine {
                 (x, y) if x == PackageState::Updating as i32 && y == PackageState::Error as i32 => {
                     "update_failed".to_string()
                 }
-                _ => format!("transition_{}_{}", current_state, target_state),
+                _ => format!("transition_{current_state}_{target_state}"),
             },
             ResourceType::Model => match (current_state, target_state) {
                 (x, y)
@@ -987,9 +985,9 @@ impl StateMachine {
                 (x, y) if x == ModelState::Failed as i32 && y == ModelState::Pending as i32 => {
                     "manual_automatic_recovery".to_string()
                 }
-                _ => format!("transition_{}_{}", current_state, target_state),
+                _ => format!("transition_{current_state}_{target_state}"),
             },
-            _ => format!("transition_{}_{}", current_state, target_state),
+            _ => format!("transition_{current_state}_{target_state}"),
         }
     }
 
@@ -1015,7 +1013,6 @@ impl StateMachine {
     ///
     /// # Error Handling
     /// Malformed conditions should be logged and default to `false` for safety.
-
     fn evaluate_condition(&self, condition: &str, _state_change: &StateChange) -> bool {
         // TODO: Implement real condition evaluation logic
         match condition {
@@ -1065,6 +1062,7 @@ impl StateMachine {
         &mut self,
         resource_key: &str,
         state_change: &StateChange,
+
         new_state: i32,
         resource_type: ResourceType,
     ) {
@@ -1160,6 +1158,7 @@ impl StateMachine {
     pub fn list_resources_by_state(
         &self,
         resource_type: Option<ResourceType>,
+
         state: i32,
     ) -> Vec<&ResourceState> {
         self.resource_states

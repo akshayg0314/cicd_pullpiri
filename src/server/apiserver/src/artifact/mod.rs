@@ -24,13 +24,19 @@ use common::spec::artifact::Volume;
 /// ### Description
 /// Write artifact in etcd
 pub async fn apply(body: &str) -> common::Result<String> {
+    use std::time::Instant;
+    let total_start = Instant::now();
+
     let docs: Vec<&str> = body.split("---").collect();
     let mut scenario_str = String::new();
     let mut package_str = String::new();
 
     for doc in docs {
+        let parse_start = Instant::now();
         let value: serde_yaml::Value = serde_yaml::from_str(doc)?;
         let artifact_str = serde_yaml::to_string(&value)?;
+        let parse_elapsed = parse_start.elapsed();
+        println!("apply: YAML parse elapsed = {:?}", parse_elapsed);
 
         if let Some(kind) = value.clone().get("kind").and_then(|k| k.as_str()) {
             let name: String = match kind {
@@ -46,7 +52,11 @@ pub async fn apply(body: &str) -> common::Result<String> {
                 }
             };
             let key = format!("{}/{}", kind, name);
+
+            let etcd_start = Instant::now();
             data::write_to_etcd(&key, &artifact_str).await?;
+            let etcd_elapsed = etcd_start.elapsed();
+            println!("apply: etcd write elapsed for {} = {:?}", key, etcd_elapsed);
 
             match kind {
                 "Scenario" => scenario_str = artifact_str,
@@ -56,13 +66,15 @@ pub async fn apply(body: &str) -> common::Result<String> {
         }
     }
 
+    let total_elapsed = total_start.elapsed();
+    println!("apply: total elapsed = {:?}", total_elapsed);
+
     if scenario_str.is_empty() {
         Err("There is not any scenario in yaml string".into())
     } else if package_str.is_empty() {
-        //Missing Check is Added for Package
         Err("There is not any package in yaml string".into())
     } else {
-        Ok(scenario_str) //, network_str))
+        Ok(scenario_str)
     }
 }
 

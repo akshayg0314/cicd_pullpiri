@@ -57,6 +57,9 @@ impl FilterGatewayReceiver {
     ///
     /// * `Result<()>` - Success or error result
     pub async fn handle_scenario(&self, scenario_yaml_str: String, action: i32) -> Result<()> {
+        use std::time::Instant;
+        let start = Instant::now();
+
         // Parse the scenario YAML string into a Scenario struct
         let scenario = serde_yaml::from_str::<Scenario>(&scenario_yaml_str)?;
 
@@ -69,6 +72,9 @@ impl FilterGatewayReceiver {
             eprintln!("Failed to send scenario: {}", e);
             Error::new(std::io::ErrorKind::Other, "Failed to send scenario")
         })?;
+
+        let elapsed = start.elapsed();
+        println!("handle_scenario: elapsed = {:?}", elapsed);
 
         Ok(())
     }

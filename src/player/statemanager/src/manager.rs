@@ -16,9 +16,11 @@
 use crate::state_machine::StateMachine;
 use crate::types::{ActionCommand, TransitionResult};
 use common::monitoringserver::ContainerList;
+
 use common::statemanager::{
     ErrorCode, ModelState, PackageState, ResourceType, ScenarioState, StateChange,
 };
+
 use common::Result;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
@@ -311,18 +313,18 @@ impl StateManagerManager {
             println!("  ✓ State transition completed successfully");
             // Convert new_state to string representation based on resource type only for logs
             let new_state_str = match resource_type {
-                ResourceType::Scenario => ScenarioState::from_i32(result.new_state)
+                ResourceType::Scenario => ScenarioState::try_from(result.new_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Package => PackageState::from_i32(result.new_state)
+                ResourceType::Package => PackageState::try_from(result.new_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Model => ModelState::from_i32(result.new_state)
+                ResourceType::Model => ModelState::try_from(result.new_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
                 _ => "UNKNOWN",
             };
-            println!("    Final State: {}", new_state_str);
+            println!("    Final State: {new_state_str}");
             println!("    Success Message: {}", result.message);
             println!("    Transition ID: {}", result.transition_id);
 
@@ -331,7 +333,7 @@ impl StateManagerManager {
             if !result.actions_to_execute.is_empty() {
                 println!("    Actions queued for async execution:");
                 for action in &result.actions_to_execute {
-                    println!("      - {}", action);
+                    println!("      - {action}");
                 }
                 println!(
                     "    Note: Actions will be executed asynchronously by the action executor"
@@ -346,13 +348,13 @@ impl StateManagerManager {
             println!("  ✗ State transition failed");
             // Convert new_state to string representation based on resource type only for logs
             let new_state_str = match resource_type {
-                ResourceType::Scenario => ScenarioState::from_i32(result.new_state)
+                ResourceType::Scenario => ScenarioState::try_from(result.new_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Package => PackageState::from_i32(result.new_state)
+                ResourceType::Package => PackageState::try_from(result.new_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
-                ResourceType::Model => ModelState::from_i32(result.new_state)
+                ResourceType::Model => ModelState::try_from(result.new_state)
                     .map(|s| s.as_str_name())
                     .unwrap_or("UNKNOWN"),
                 _ => "UNKNOWN",
@@ -360,7 +362,7 @@ impl StateManagerManager {
             println!("    Error Code: {:?}", result.error_code);
             println!("    Error Message: {}", result.message);
             println!("    Error Details: {}", result.error_details);
-            println!("    Current State: {} (unchanged)", new_state_str);
+            println!("    Current State: {new_state_str} (unchanged)");
             println!("    Failed Transition ID: {}", result.transition_id);
 
             // Delegate to specialized failure handling logic
@@ -573,7 +575,7 @@ impl StateManagerManager {
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Error in processing tasks: {:?}", e);
+                eprintln!("Error in processing tasks: {e:?}");
                 Err(e.into())
             }
         }
@@ -620,7 +622,7 @@ impl StateManagerManager {
         // Spawn the main gRPC processing task
         let grpc_processor = tokio::spawn(async move {
             if let Err(e) = grpc_manager.process_grpc_requests().await {
-                eprintln!("Error in gRPC processor: {:?}", e);
+                eprintln!("Error in gRPC processor: {e:?}");
             }
         });
 
@@ -632,7 +634,7 @@ impl StateManagerManager {
                 Ok(())
             }
             Err(e) => {
-                eprintln!("StateManagerManager stopped with error: {:?}", e);
+                eprintln!("StateManagerManager stopped with error: {e:?}");
                 Err(e.into())
             }
         }

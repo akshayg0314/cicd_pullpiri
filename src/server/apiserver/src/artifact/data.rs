@@ -36,7 +36,15 @@ pub async fn read_all_scenario_from_etcd() -> common::Result<Vec<String>> {
 /// ### Return
 /// * `Result<()>` - `Ok` if success, `Err` otherwise
 pub async fn write_to_etcd(key: &str, artifact_str: &str) -> common::Result<()> {
-    common::etcd::put(key, artifact_str).await?;
+    use std::time::Instant;
+    let start = Instant::now();
+
+    let result = common::etcd::put(key, artifact_str).await;
+    let elapsed = start.elapsed();
+
+    println!("write_to_etcd: elapsed = {:?}", elapsed);
+
+    result?;
     Ok(())
 }
 
@@ -142,9 +150,14 @@ spec:
     // Test writing valid key and yaml
     #[tokio::test]
     async fn test_write_to_etcd_positive() {
+        use std::time::Instant;
+        let start = Instant::now();
         let result = write_to_etcd(TEST_KEY, TEST_YAML).await;
-        println!("write_to_etcd (positive) result = {:?}", result);
-        // We expect the write to succeed with valid key & data or ERR(etcd error)
+        let duration = start.elapsed();
+        println!(
+            "write_to_etcd (positive) result = {:?}, elapsed = {:?}",
+            result, duration
+        );
         assert!(
             result.is_ok() || result.is_err(),
             "Expected write_to_etcd to succeed or Err but got: {:?}",

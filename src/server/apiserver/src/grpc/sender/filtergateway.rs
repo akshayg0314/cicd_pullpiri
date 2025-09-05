@@ -21,10 +21,18 @@ use tonic::{Request, Response, Status};
 pub async fn send(
     scenario: HandleScenarioRequest,
 ) -> Result<Response<HandleScenarioResponse>, Status> {
+    use std::time::Instant;
+    let start = Instant::now();
+
     let mut client = FilterGatewayConnectionClient::connect(connect_server())
         .await
         .unwrap();
-    client.handle_scenario(Request::new(scenario)).await
+    let response = client.handle_scenario(Request::new(scenario)).await;
+
+    let elapsed = start.elapsed();
+    println!("send: elapsed = {:?}", elapsed);
+
+    response
 }
 
 //UNIT TEST CASES

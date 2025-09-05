@@ -58,6 +58,9 @@ impl Filter {
     ///
     /// * `Result<()>` - Success or error result
     pub async fn meet_scenario_condition(&mut self, data: &DdsData) -> Result<()> {
+        use std::time::Instant;
+        let start = Instant::now();
+
         let condition = self.scenario.get_conditions().unwrap();
         let topic = condition.get_operand_value();
         let value_name = condition.get_operand_name();
@@ -65,18 +68,23 @@ impl Filter {
         let express = condition.get_express();
 
         print!(
-            "Checking condition for scenario: {}\nTopic: {}\nTarget Value: {}\nValue Name: {}\nExpression: {}\n",
-            self.scenario_name, topic, target_value, value_name, express
-        );
+        "Checking condition for scenario: {}\nTopic: {}\nTarget Value: {}\nValue Name: {}\nExpression: {}\n",
+        self.scenario_name, topic, target_value, value_name, express
+    );
 
         if !data.name.eq(&topic) {
+            let elapsed = start.elapsed();
+            println!("meet_scenario_condition: elapsed = {:?}", elapsed);
             return Err("data topic does not match".into());
         }
 
-        // fields에서 value_name과 일치하는 key를 찾고, 해당 value와 target_value를 비교
         let field_value = match data.fields.get(&value_name) {
             Some(v) => v,
-            None => return Err(format!("field '{}' not found in data.fields", value_name).into()),
+            None => {
+                let elapsed = start.elapsed();
+                println!("meet_scenario_condition: elapsed = {:?}", elapsed);
+                return Err(format!("field '{}' not found in data.fields", value_name).into());
+            }
         };
 
         let check: bool = match express.as_str() {
@@ -117,8 +125,15 @@ impl Filter {
                     .map_err(|_| "field_value parse error")?;
                 current_v > target_v
             }
-            _ => return Err("wrong expression in condition".into()),
+            _ => {
+                let elapsed = start.elapsed();
+                println!("meet_scenario_condition: elapsed = {:?}", elapsed);
+                return Err("wrong expression in condition".into());
+            }
         };
+
+        let elapsed = start.elapsed();
+        println!("meet_scenario_condition: elapsed = {:?}", elapsed);
 
         if check {
             println!("Condition met for scenario: {}", self.scenario_name);

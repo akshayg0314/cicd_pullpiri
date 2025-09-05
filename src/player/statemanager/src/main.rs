@@ -61,14 +61,14 @@ async fn launch_manager(
             // Run the main processing loop
             println!("Starting StateManagerManager main processing loop...");
             if let Err(e) = manager.run().await {
-                eprintln!("StateManagerManager stopped with error: {:?}", e);
+                eprintln!("StateManagerManager stopped with error: {e:?}");
                 eprintln!("This may indicate a critical system failure or shutdown request");
             } else {
                 println!("StateManagerManager stopped gracefully");
             }
         }
         Err(e) => {
-            eprintln!("Failed to initialize StateManagerManager: {:?}", e);
+            eprintln!("Failed to initialize StateManagerManager: {e:?}");
             eprintln!("StateManager service cannot start - check configuration and dependencies");
             // Don't panic - allow graceful shutdown of other components
         }
@@ -114,11 +114,11 @@ async fn initialize_grpc_server(
     // Parse the server address from configuration
     let addr = match common::statemanager::open_server().parse() {
         Ok(addr) => {
-            println!("StateManager gRPC server will bind to: {}", addr);
+            println!("StateManager gRPC server will bind to: {addr}");
             addr
         }
         Err(e) => {
-            eprintln!("Failed to parse StateManager server address: {:?}", e);
+            eprintln!("Failed to parse StateManager server address: {e:?}");
             eprintln!("Check StateManager address configuration in common module");
             return; // Exit gracefully without panicking
         }
@@ -135,7 +135,7 @@ async fn initialize_grpc_server(
             println!("StateManager gRPC server stopped gracefully");
         }
         Err(e) => {
-            eprintln!("StateManager gRPC server error: {:?}", e);
+            eprintln!("StateManager gRPC server error: {e:?}");
             eprintln!(
                 "This may indicate network issues, port conflicts, or configuration problems"
             );
@@ -194,7 +194,7 @@ async fn main() {
 
     // Run both components concurrently until shutdown
     // tokio::join! ensures both tasks complete before main exits
-    let (manager_result, grpc_result) = tokio::join!(manager_task, grpc_task);
+    tokio::join!(manager_task, grpc_task);
 
     // Both tasks return (), but we log completion for monitoring
     println!("StateManager service components have stopped:");

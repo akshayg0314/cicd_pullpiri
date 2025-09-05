@@ -6,7 +6,6 @@
 use crate::data_structures::{BoardInfo, DataStore, SocInfo};
 use common::monitoringserver::{ContainerList, NodeInfo};
 use common::Result;
-use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
@@ -25,10 +24,6 @@ pub struct MonitoringServerManager {
 
 impl MonitoringServerManager {
     /// Creates a new MonitoringServerManager instance.
-    ///
-    /// # Arguments
-    /// * `rx_container` - Channel receiver for container information
-    /// * `rx_node` - Channel receiver for node information
     pub async fn new(
         rx_container: mpsc::Receiver<ContainerList>,
         rx_node: mpsc::Receiver<NodeInfo>,
@@ -74,50 +69,47 @@ impl MonitoringServerManager {
     async fn handle_node_info(&self, node_info: NodeInfo) {
         // Print detailed NodeInfo first
         self.print_node_info(&node_info);
-
-        // Store NodeInfo and update SocInfo/BoardInfo
+        
+        // Store NodeInfo and update SocInfo/BoardInfo with etcd storage
         {
             let mut data_store = self.data_store.lock().await;
-            match data_store.store_node_info(node_info.clone()) {
+            match data_store.store_node_info(node_info.clone()).await {  // Add .await here
                 Ok(_) => {
-                    println!(
-                        "[MonitoringServer] ✅ Successfully stored NodeInfo for {}",
-                        node_info.node_name
-                    );
+                    println!("[MonitoringServer] SUCCESS: Successfully stored NodeInfo for {}", node_info.node_name);
 
-                    // **ENHANCED**: Print ID generation details
+                    // Print ID generation details
                     self.print_id_generation_details(&node_info.ip);
 
                     // Print aggregated information
                     self.print_aggregated_info(&data_store, &node_info.ip).await;
 
-                    // **ENHANCED**: Print detailed SoC mapping
+                    // Print detailed SoC mapping
                     self.print_detailed_soc_mapping(&data_store).await;
 
                     // Print summary statistics
                     self.print_summary_stats(&data_store).await;
                 }
                 Err(e) => {
-                    eprintln!("[MonitoringServer] ❌ Error storing NodeInfo: {}", e);
+                    eprintln!("[MonitoringServer] ERROR: Error storing NodeInfo: {}", e);
                 }
             }
         }
-
-        println!("{}", "=".repeat(80)); // Separator line
+        
+        println!("{}", "=".repeat(80));
     }
 
     /// Print ID generation details for debugging
     fn print_id_generation_details(&self, ip: &str) {
-        println!("\n🔍 ID GENERATION DEBUG");
+        println!("\n ID GENERATION DEBUG");
         println!("┌─────────────────────────────────────────────────────────────────────────────┐");
-        println!("│ Input IP: {:<66} │", ip);
+        println!("│ Input IP: {:<65} │", ip);
 
         if let Ok(soc_id) = DataStore::generate_soc_id(ip) {
-            println!("│ Generated SoC ID: {:<58} │", soc_id);
+            println!("│ Generated SoC ID: {:<57} │", soc_id);
         }
 
         if let Ok(board_id) = DataStore::generate_board_id(ip) {
-            println!("│ Generated Board ID: {:<56} │", board_id);
+            println!("│ Generated Board ID: {:<55} │", board_id);
         }
 
         // Show the logic
@@ -128,7 +120,7 @@ impl MonitoringServerManager {
             let board_group = (last_octet / 100) * 100;
 
             println!(
-                "│ Last Octet: {:<3} → SoC Group: {:<3} → Board Group: {:<3}              │",
+                "│ Last Octet: {:<3} → SoC Group: {:<3} → Board Group: {:<8}                    │",
                 last_octet, soc_group, board_group
             );
         }
@@ -137,12 +129,12 @@ impl MonitoringServerManager {
 
     /// Print detailed SoC mapping for all current data
     async fn print_detailed_soc_mapping(&self, data_store: &DataStore) {
-        println!("\n🗺️  DETAILED SOC MAPPING");
+        println!("\n DETAILED SOC MAPPING");
         println!("┌─────────────────────────────────────────────────────────────────────────────┐");
 
         for (soc_id, soc_info) in data_store.get_all_socs() {
             println!(
-                "│ SoC: {:<20} │ Nodes: {:<2} │ Nodes List: {:<25} │",
+                "│ SoC: {:<20} │ Nodes: {:<2} │ Nodes List: {:<24}│",
                 soc_id,
                 soc_info.nodes.len(),
                 soc_info
@@ -158,7 +150,7 @@ impl MonitoringServerManager {
 
         for (board_id, board_info) in data_store.get_all_boards() {
             println!(
-                "│ Board: {:<18} │ Nodes: {:<2} │ SoCs: {:<2} │ SoC List: {:<15} │",
+                "│ Board: {:<18} │ Nodes: {:<2} │ SoCs: {:<2} │ SoC List: {:<14} │",
                 board_id,
                 board_info.nodes.len(),
                 board_info.socs.len(),
@@ -175,27 +167,27 @@ impl MonitoringServerManager {
 
     /// Enhanced Board info printing with SoC details
     fn print_board_info(&self, board_info: &BoardInfo) {
-        println!("\n🖥️  BOARD INFORMATION");
+        println!("\nBOARD INFORMATION");
         println!("┌─────────────────────────────────────────────────────────────────────────────┐");
-        println!("│ Board ID: {:<66} │", board_info.board_id);
+        println!("│ Board ID: {:<65} │", board_info.board_id);
         println!(
-            "│ Nodes Count: {:<6} │ SoCs Count: {:<6} │ Updated: {:<20} │",
+            "│ Nodes Count: {:<6} │ SoCs Count: {:<6} │ Updated: {:<19}     │",
             board_info.nodes.len(),
             board_info.socs.len(),
             self.format_time_ago(&board_info.last_updated)
         );
 
-        // **NEW**: Show SoCs in this board
+        // Show SoCs in this board
         if !board_info.socs.is_empty() {
             println!(
                 "├─────────────────────────────────────────────────────────────────────────────┤"
             );
             println!(
-                "│ SoCs in this Board:                                                        │"
+                "│ SoCs in this Board:                                                         │"
             );
             for (i, soc) in board_info.socs.iter().enumerate() {
                 println!(
-                    "│  {}. SoC: {:<25} │ Nodes: {:<2} │ Avg CPU: {:<6.2}%        │",
+                    "│  {}. SoC: {:<25} │ Nodes: {:<2} │ Avg CPU: {:<6.2}%           │",
                     i + 1,
                     soc.soc_id,
                     soc.nodes.len(),
@@ -205,30 +197,30 @@ impl MonitoringServerManager {
         }
 
         println!("├─────────────────────────────────────────────────────────────────────────────┤");
-        println!("│ Board-wide Aggregated Metrics:                                             │");
+        println!("│ Board-wide Aggregated Metrics:                                              │");
         println!(
-            "│   CPU: {:<7.2}% │ Total Cores: {:<8} │ GPU Units: {:<8} │ Efficiency: {:<6} │",
+            "│   CPU: {:<7.2}% │ Total Cores: {:<5} │ GPU Units: {:<3} │ Efficiency: {:<4}    │",
             board_info.total_cpu_usage,
             board_info.total_cpu_count,
             board_info.total_gpu_count,
             self.calculate_efficiency(board_info.total_cpu_usage)
         );
         println!(
-            "│   Memory: {:<4.2}% │ Used: {:<11} │ Total: {:<11} │ Free: {:<8} │",
+            "│   Memory: {:<4.2}% │ Used: {:<9} │ Total: {:<9} │ Free: {:<9} │",
             board_info.total_mem_usage,
             self.format_memory(board_info.total_used_memory),
             self.format_memory(board_info.total_memory),
             self.format_memory(board_info.total_memory - board_info.total_used_memory)
         );
         println!("├─────────────────────────────────────────────────────────────────────────────┤");
-        println!("│ Nodes on this Board (grouped by SoC):                                     │");
+        println!("│ Nodes on this Board (grouped by SoC):                                       │");
         for (i, node) in board_info.nodes.iter().enumerate() {
             let status = if node.cpu_usage > 80.0 {
-                "🔴 HIGH"
+                "HIGH"
             } else if node.cpu_usage > 50.0 {
-                "🟡 MED"
+                "MED"
             } else {
-                "🟢 LOW"
+                "LOW"
             };
             // Show which SoC this node belongs to
             let soc_id = DataStore::generate_soc_id(&node.ip).unwrap_or_default();
@@ -246,17 +238,17 @@ impl MonitoringServerManager {
 
     /// Prints detailed NodeInfo in a formatted way
     fn print_node_info(&self, node_info: &NodeInfo) {
-        println!("\n📊 NODE INFORMATION");
+        println!("\nNODE INFORMATION");
         println!("┌─────────────────────────────────────────────────────────────────────────────┐");
-        println!("│ Node: {:<70} │", node_info.node_name);
-        println!("│ IP Address: {:<64} │", node_info.ip);
+        println!("│ Node: {:<69} │", node_info.node_name);
+        println!("│ IP Address: {:<63} │", node_info.ip);
         println!("├─────────────────────────────────────────────────────────────────────────────┤");
         println!(
-            "│ CPU Usage: {:<6.2}% │ Cores: {:<6} │ GPU Units: {:<6} │ OS: {:<15} │",
+            "│ CPU Usage: {:<6.2}% │ Cores: {:<3} │ GPU Units: {:<3} │ OS: {:<4} │",
             node_info.cpu_usage, node_info.cpu_count, node_info.gpu_count, node_info.os
         );
         println!(
-            "│ Memory: {:<7.2}% │ Used: {:<8} KB │ Total: {:<8} KB │ Arch: {:<12} │",
+            "│ Memory: {:<7.2}% │ Used: {:<8} KB │ Total: {:<8} KB │ Arch: {:<6} │",
             node_info.mem_usage,
             self.format_memory(node_info.used_memory),
             self.format_memory(node_info.total_memory),
@@ -264,13 +256,13 @@ impl MonitoringServerManager {
         );
         println!("├─────────────────────────────────────────────────────────────────────────────┤");
         println!(
-            "│ Network - RX: {:<15} │ TX: {:<15} │ Total: {:<15} │",
+            "│ Network - RX: {:<15} │ TX: {:<15} │ Total: {:<14} │",
             self.format_bytes(node_info.rx_bytes),
             self.format_bytes(node_info.tx_bytes),
             self.format_bytes(node_info.rx_bytes + node_info.tx_bytes)
         );
         println!(
-            "│ Disk I/O - Read: {:<12} │ Write: {:<12} │ Total: {:<12} │",
+            "│ Disk I/O - Read: {:<12} │ Write: {:<12} │ Total: {:<14} │",
             self.format_bytes(node_info.read_bytes),
             self.format_bytes(node_info.write_bytes),
             self.format_bytes(node_info.read_bytes + node_info.write_bytes)
@@ -297,42 +289,42 @@ impl MonitoringServerManager {
 
     /// Prints detailed SoC information
     fn print_soc_info(&self, soc_info: &SocInfo) {
-        println!("\n🔧 SOC INFORMATION");
+        println!("\n SOC INFORMATION");
         println!("┌─────────────────────────────────────────────────────────────────────────────┐");
-        println!("│ SoC ID: {:<68} │", soc_info.soc_id);
-        println!("│ Nodes Count: {:<63} │", soc_info.nodes.len());
+        println!("│ SoC ID: {:<67} │", soc_info.soc_id);
+        println!("│ Nodes Count: {:<62} │", soc_info.nodes.len());
         println!("├─────────────────────────────────────────────────────────────────────────────┤");
-        println!("│ Aggregated Metrics:                                                        │");
+        println!("│ Aggregated Metrics:                                                         │");
         println!(
-            "│   CPU: {:<7.2}% │ Total Cores: {:<8} │ GPU Units: {:<8} │ Updated: {:<8} │",
+            "│   CPU: {:<7.2}%    │ Total Cores: {:<8}  │ GPU Units: {:<8}  │ Updated: {:<8} │",
             soc_info.total_cpu_usage,
             soc_info.total_cpu_count,
             soc_info.total_gpu_count,
             self.format_time_ago(&soc_info.last_updated)
         );
         println!(
-            "│   Memory: {:<4.2}% │ Used: {:<11} │ Total: {:<11} │ Free: {:<8} │",
+            "│   Memory: {:<4.2}%   │ Used: {:<11}      │ Total: {:<11}   │ Free: {:<8}  │",
             soc_info.total_mem_usage,
             self.format_memory(soc_info.total_used_memory),
             self.format_memory(soc_info.total_memory),
             self.format_memory(soc_info.total_memory - soc_info.total_used_memory)
         );
         println!(
-            "│   Network: RX {:<12} │ TX {:<12} │ Total {:<12} │",
+            "│   Network: RX {:<12} │ TX {:<12}         │ Total {:<12} │",
             self.format_bytes(soc_info.total_rx_bytes),
             self.format_bytes(soc_info.total_tx_bytes),
             self.format_bytes(soc_info.total_rx_bytes + soc_info.total_tx_bytes)
         );
         println!(
-            "│   Disk I/O: Read {:<9} │ Write {:<9} │ Total {:<9} │",
+            "│   Disk I/O: Read {:<9} │ Write {:<9}         │ Total {:<9}    │",
             self.format_bytes(soc_info.total_read_bytes),
             self.format_bytes(soc_info.total_write_bytes),
             self.format_bytes(soc_info.total_read_bytes + soc_info.total_write_bytes)
         );
         println!("├─────────────────────────────────────────────────────────────────────────────┤");
-        println!("│ Nodes in this SoC:                                                         │");
+        println!("│ Nodes in this SoC:                                                          │");
         for (i, node) in soc_info.nodes.iter().enumerate() {
-            println!("│  {}. {:<70} │", i + 1, node.node_name);
+            println!("│  {}. {:<71} │", i + 1, node.node_name);
         }
         println!("└─────────────────────────────────────────────────────────────────────────────┘");
     }
@@ -343,7 +335,7 @@ impl MonitoringServerManager {
         let total_socs = data_store.get_all_socs().len();
         let total_boards = data_store.get_all_boards().len();
 
-        println!("\n📈 SYSTEM SUMMARY");
+        println!("\n SYSTEM SUMMARY");
         println!("┌─────────────────────────────────────────────────────────────────────────────┐");
         println!(
             "│ Total Nodes: {:<8} │ Total SoCs: {:<8} │ Total Boards: {:<8} │ Status: ✅ │",
@@ -453,11 +445,11 @@ impl MonitoringServerManager {
     pub async fn print_all_data(&self) {
         let data_store = self.data_store.lock().await;
 
-        println!("\n🌐 COMPLETE SYSTEM OVERVIEW");
+        println!("\n COMPLETE SYSTEM OVERVIEW");
         println!("{}", "=".repeat(80));
 
         // Print all nodes
-        println!("\n📋 ALL NODES:");
+        println!("\n ALL NODES:");
         for (i, (_, node)) in data_store.get_all_nodes().iter().enumerate() {
             println!(
                 "{}. {} (IP: {}) - CPU: {:.2}%, Memory: {:.2}%",
@@ -470,7 +462,7 @@ impl MonitoringServerManager {
         }
 
         // Print all SoCs
-        println!("\n🔧 ALL SOCs:");
+        println!("\n ALL SOCs:");
         for (i, (_, soc)) in data_store.get_all_socs().iter().enumerate() {
             println!(
                 "{}. {} - {} nodes, Avg CPU: {:.2}%, Avg Memory: {:.2}%",
@@ -483,7 +475,7 @@ impl MonitoringServerManager {
         }
 
         // Print all Boards
-        println!("\n🖥️  ALL BOARDS:");
+        println!("\n  ALL BOARDS:");
         for (i, (_, board)) in data_store.get_all_boards().iter().enumerate() {
             println!(
                 "{}. {} - {} nodes, {} SoCs, Avg CPU: {:.2}%, Avg Memory: {:.2}%",

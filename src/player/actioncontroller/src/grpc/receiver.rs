@@ -62,22 +62,21 @@ impl ActionControllerConnection for ActionControllerReceiver {
         &self,
         request: Request<TriggerActionRequest>,
     ) -> Result<Response<TriggerActionResponse>, Status> {
-        // TODO: Implementation
+        use std::time::Instant;
+        let start = Instant::now();
+
         println!("trigger_action in grpc receiver");
 
         let scenario_name = request.into_inner().scenario_name;
         println!("trigger_action scenario: {}", scenario_name);
 
-        match self.manager.trigger_manager_action(&scenario_name).await {
+        let result = match self.manager.trigger_manager_action(&scenario_name).await {
             Ok(_) => Ok(Response::new(TriggerActionResponse {
                 status: 0,
                 desc: "Action triggered successfully".to_string(),
             })),
-
             Err(e) => {
                 let err_msg = e.to_string();
-
-                // Decide gRPC error code based on error content
                 let grpc_status = if err_msg.contains("Invalid scenario name") {
                     Status::invalid_argument(err_msg)
                 } else if err_msg.contains("not found") {
@@ -89,14 +88,16 @@ impl ActionControllerConnection for ActionControllerReceiver {
                 {
                     Status::internal(err_msg)
                 } else {
-                    // fallback to Unknown error code
                     Status::unknown(err_msg)
                 };
-
-                // Return the gRPC error status instead of success response with error status code
                 Err(grpc_status)
             }
-        }
+        };
+
+        let elapsed = start.elapsed();
+        println!("trigger_action: elapsed = {:?}", elapsed);
+
+        result
     }
 
     /// Handle reconcile requests from StateManager
