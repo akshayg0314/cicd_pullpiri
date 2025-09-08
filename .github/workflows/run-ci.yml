@@ -13,18 +13,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Install Rust toolchain
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      # Step 3: Install Docker Compose dependencies (if needed)
-      - name: Install Docker Compose and utilities
+      # Step 2: Install essential dependencies including protobuf-compiler and dbus
+      - name: Install essential dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y docker-compose jq curl lsb-release
+          sudo apt-get install -y docker-compose jq curl lsb-release protobuf-compiler libdbus-1-dev pkg-config build-essential
+
+      # Step 3: Install Rust toolchain
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       # Step 4: Make all scripts executable
       - name: Make scripts executable
@@ -53,29 +50,18 @@ jobs:
       - name: Build and parse project
         run: ./scripts/buildNparse.sh
 
+      # Step 7.5: Add musl target for static linking
+      - name: Add musl target
+        run: rustup target add x86_64-unknown-linux-musl
+
       # Step 8: Build nodeagent binary for release (x86_64 only)
-      - name: Build nodeagent binary (x86_64)
+      - name: Build nodeagent binary (x86_64 static)
         run: |
-          echo "Building nodeagent from src/agent/nodeagent directory..."
-          
-          # Build from the nodeagent package directory
+          echo "Building nodeagent (static) from src/agent/nodeagent directory..."
           cd src/agent/nodeagent
-          cargo build --release
-          
-          # Go back to project root
+          cargo build --release --target x86_64-unknown-linux-musl
           cd ../../../
-          
-          # The binary should be at src/agent/target/release/nodeagent (based on your output)
-          if [ -f "src/agent/target/release/nodeagent" ]; then
-            echo "Found binary at: src/agent/target/release/nodeagent"
-            cp src/agent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
-          else
-            echo "Binary not found, searching entire project..."
-            find . -name "nodeagent" -type f -executable
-            exit 1
-          fi
-          
-          # Verify binary was created
+          cp src/agent/target/x86_64-unknown-linux-musl/release/nodeagent dist/binaries/nodeagent-linux-amd64
           ls -la dist/binaries/
           file dist/binaries/nodeagent-linux-amd64
 
