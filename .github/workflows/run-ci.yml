@@ -54,16 +54,17 @@ jobs:
       - name: Add musl target
         run: rustup target add x86_64-unknown-linux-musl
 
-      # Step 8: Build nodeagent binary for release (x86_64 only)
-      - name: Build nodeagent binary (x86_64 static)
+      # Step 8: Build nodeagent binary for release (x86_64 dynamic)
+      - name: Build nodeagent binary (x86_64 dynamic)
         run: |
-          echo "Building nodeagent (static) from src/agent/nodeagent directory..."
+          echo "Building nodeagent (dynamic) from src/agent/nodeagent directory..."
           cd src/agent/nodeagent
-          cargo build --release --target x86_64-unknown-linux-musl
+          cargo build --release  # Removes --target flag for default glibc build
           cd ../../../
-          cp src/agent/target/x86_64-unknown-linux-musl/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          cp src/agent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
           ls -la dist/binaries/
           file dist/binaries/nodeagent-linux-amd64
+          ldd dist/binaries/nodeagent-linux-amd64  # Shows dynamic dependencies
 
       # Step 9: Run all Rust unit/integration tests and generate reports
       - name: Run tests and generate report
