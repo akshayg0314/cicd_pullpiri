@@ -24,6 +24,10 @@ pub struct MonitoringServerManager {
 
 impl MonitoringServerManager {
     /// Creates a new MonitoringServerManager instance.
+    ///
+    /// # Arguments
+    /// * `rx_container` - Channel receiver for container information
+    /// * `rx_node` - Channel receiver for node information
     pub async fn new(
         rx_container: mpsc::Receiver<ContainerList>,
         rx_node: mpsc::Receiver<NodeInfo>,
@@ -70,14 +74,13 @@ impl MonitoringServerManager {
         // Print detailed NodeInfo first
         self.print_node_info(&node_info);
 
-        // Store NodeInfo and update SocInfo/BoardInfo with etcd storage
+        // Store NodeInfo and update SocInfo/BoardInfo
         {
             let mut data_store = self.data_store.lock().await;
-            match data_store.store_node_info(node_info.clone()).await {
-                // Add .await here
+            match data_store.store_node_info(node_info.clone()) {
                 Ok(_) => {
                     println!(
-                        "[MonitoringServer] SUCCESS: Successfully stored NodeInfo for {}",
+                        "[MonitoringServer]  Successfully stored NodeInfo for {}",
                         node_info.node_name
                     );
 
@@ -94,12 +97,12 @@ impl MonitoringServerManager {
                     self.print_summary_stats(&data_store).await;
                 }
                 Err(e) => {
-                    eprintln!("[MonitoringServer] ERROR: Error storing NodeInfo: {}", e);
+                    eprintln!("[MonitoringServer] ❌ Error storing NodeInfo: {}", e);
                 }
             }
         }
 
-        println!("{}", "=".repeat(80));
+        println!("{}", "=".repeat(80)); // Separator line
     }
 
     /// Print ID generation details for debugging

@@ -4,15 +4,13 @@
  */
 
 use common::monitoringserver::NodeInfo;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 /// Aggregated information from multiple nodes on the same SoC
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SocInfo {
-    /// Temporary IP-based ID until proper SoC identification policy is defined
     pub soc_id: String,
     pub nodes: Vec<NodeInfo>,
     pub total_cpu_usage: f64,
@@ -25,14 +23,12 @@ pub struct SocInfo {
     pub total_tx_bytes: u64,
     pub total_read_bytes: u64,
     pub total_write_bytes: u64,
-    #[serde(with = "system_time_serde")]
     pub last_updated: std::time::SystemTime,
 }
 
 /// Aggregated information from multiple nodes on the same board
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BoardInfo {
-    /// Temporary IP-based ID until proper Board identification policy is defined
     pub board_id: String,
     pub nodes: Vec<NodeInfo>,
     pub socs: Vec<SocInfo>,
@@ -46,30 +42,7 @@ pub struct BoardInfo {
     pub total_tx_bytes: u64,
     pub total_read_bytes: u64,
     pub total_write_bytes: u64,
-    #[serde(with = "system_time_serde")]
     pub last_updated: std::time::SystemTime,
-}
-
-// Helper module for SystemTime serialization
-mod system_time_serde {
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let duration = time.duration_since(UNIX_EPOCH).unwrap();
-        serializer.serialize_u64(duration.as_secs())
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let secs = u64::deserialize(deserializer)?;
-        Ok(UNIX_EPOCH + std::time::Duration::from_secs(secs))
-    }
 }
 
 /// Data store for managing NodeInfo, SocInfo, and BoardInfo
@@ -89,8 +62,8 @@ impl DataStore {
         }
     }
 
-    /// Stores NodeInfo and updates corresponding SocInfo and BoardInfo, then saves to etcd
-    pub async fn store_node_info(&mut self, node_info: NodeInfo) -> Result<(), String> {
+    /// Stores NodeInfo and updates corresponding SocInfo and BoardInfo
+    pub fn store_node_info(&mut self, node_info: NodeInfo) -> Result<(), String> {
         let node_name = node_info.node_name.clone();
         let ip = node_info.ip.clone();
 
@@ -104,41 +77,8 @@ impl DataStore {
 
         // Store node and update aggregations
         self.nodes.insert(node_name.clone(), node_info.clone());
-        self.update_soc_info(soc_id.clone(), node_info.clone())?;
-        self.update_board_info(board_id.clone(), node_info.clone())?;
-
-        // Store to etcd with better error handling
-        let mut etcd_errors = Vec::new();
-
-        if let Err(e) = crate::etcd_storage::store_node_info(&node_info).await {
-            let error_msg = format!("Failed to store NodeInfo to etcd: {}", e);
-            eprintln!("[ETCD] {}", error_msg);
-            etcd_errors.push(error_msg);
-        }
-
-        if let Some(soc_info) = self.socs.get(&soc_id) {
-            if let Err(e) = crate::etcd_storage::store_soc_info(soc_info).await {
-                let error_msg = format!("Failed to store SocInfo to etcd: {}", e);
-                eprintln!("[ETCD] {}", error_msg);
-                etcd_errors.push(error_msg);
-            }
-        }
-
-        if let Some(board_info) = self.boards.get(&board_id) {
-            if let Err(e) = crate::etcd_storage::store_board_info(board_info).await {
-                let error_msg = format!("Failed to store BoardInfo to etcd: {}", e);
-                eprintln!("[ETCD] {}", error_msg);
-                etcd_errors.push(error_msg);
-            }
-        }
-
-        // Log warning if etcd operations failed but don't fail the entire operation
-        if !etcd_errors.is_empty() {
-            eprintln!(
-                "[ETCD] Warning: {} etcd operations failed",
-                etcd_errors.len()
-            );
-        }
+        self.update_soc_info(soc_id, node_info.clone())?;
+        self.update_board_info(board_id, node_info)?;
 
         Ok(())
     }
@@ -214,8 +154,7 @@ impl DataStore {
             .socs
             .values()
             .filter(|soc| {
-                // Directly use generate_board_id instead of separate function
-                if let Ok(soc_board_id) = Self::generate_board_id(&soc.soc_id) {
+                if let Ok(soc_board_id) = Self::generate_board_id_from_soc_id(&soc.soc_id) {
                     soc_board_id == board_id
                 } else {
                     false
@@ -230,6 +169,13 @@ impl DataStore {
         }
 
         Ok(())
+    }
+
+    /// Helper function to generate board ID from SoC ID
+    fn generate_board_id_from_soc_id(soc_id: &str) -> Result<String, String> {
+        // SoC ID format: "192.168.2.200"
+        // Board ID format: "192.168.2.200" (same for 200-299 range)
+        Self::generate_board_id(soc_id)
     }
 
     pub fn get_node_info(&self, node_name: &str) -> Option<&NodeInfo> {
@@ -297,29 +243,34 @@ impl SocInfo {
 
     /// Recalculates aggregated values from current nodes
     fn recalculate_totals(&mut self) {
-        let (
-            cpu_usage,
-            mem_usage,
-            used_memory,
-            total_memory,
-            cpu_count,
-            gpu_count,
-            rx_bytes,
-            tx_bytes,
-            read_bytes,
-            write_bytes,
-        ) = self.calculate_aggregated_values();
+        let node_count = self.nodes.len() as f64;
 
-        self.total_cpu_usage = cpu_usage;
-        self.total_mem_usage = mem_usage;
-        self.total_used_memory = used_memory;
-        self.total_memory = total_memory;
-        self.total_cpu_count = cpu_count;
-        self.total_gpu_count = gpu_count;
-        self.total_rx_bytes = rx_bytes;
-        self.total_tx_bytes = tx_bytes;
-        self.total_read_bytes = read_bytes;
-        self.total_write_bytes = write_bytes;
+        if node_count > 0.0 {
+            // Average CPU usage percentages across nodes (no per-CPU performance info available)
+            self.total_cpu_usage = self.nodes.iter().map(|n| n.cpu_usage).sum::<f64>() / node_count;
+
+            // Calculate memory usage from actual memory values (nodes have different memory sizes)
+            self.total_used_memory = self.nodes.iter().map(|n| n.used_memory).sum();
+            self.total_memory = self.nodes.iter().map(|n| n.total_memory).sum();
+            self.total_mem_usage = if self.total_memory > 0 {
+                (self.total_used_memory as f64 * 100.0) / self.total_memory as f64
+            } else {
+                0.0
+            };
+        } else {
+            self.total_cpu_usage = 0.0;
+            self.total_mem_usage = 0.0;
+            self.total_used_memory = 0;
+            self.total_memory = 0;
+        }
+
+        // Sum absolute values across nodes
+        self.total_cpu_count = self.nodes.iter().map(|n| n.cpu_count).sum();
+        self.total_gpu_count = self.nodes.iter().map(|n| n.gpu_count).sum();
+        self.total_rx_bytes = self.nodes.iter().map(|n| n.rx_bytes).sum();
+        self.total_tx_bytes = self.nodes.iter().map(|n| n.tx_bytes).sum();
+        self.total_read_bytes = self.nodes.iter().map(|n| n.read_bytes).sum();
+        self.total_write_bytes = self.nodes.iter().map(|n| n.write_bytes).sum();
     }
 }
 
@@ -364,83 +315,33 @@ impl BoardInfo {
 
     /// Recalculates aggregated values from current nodes
     fn recalculate_totals(&mut self) {
-        let (
-            cpu_usage,
-            mem_usage,
-            used_memory,
-            total_memory,
-            cpu_count,
-            gpu_count,
-            rx_bytes,
-            tx_bytes,
-            read_bytes,
-            write_bytes,
-        ) = self.calculate_aggregated_values();
-
-        self.total_cpu_usage = cpu_usage;
-        self.total_mem_usage = mem_usage;
-        self.total_used_memory = used_memory;
-        self.total_memory = total_memory;
-        self.total_cpu_count = cpu_count;
-        self.total_gpu_count = gpu_count;
-        self.total_rx_bytes = rx_bytes;
-        self.total_tx_bytes = tx_bytes;
-        self.total_read_bytes = read_bytes;
-        self.total_write_bytes = write_bytes;
-    }
-}
-
-/// Helper trait for calculating aggregated metrics
-trait AggregatedMetrics {
-    fn get_nodes(&self) -> &Vec<NodeInfo>;
-
-    fn calculate_aggregated_values(&self) -> (f64, f64, u64, u64, u64, u64, u64, u64, u64, u64) {
-        let nodes = self.get_nodes();
-        let node_count = nodes.len() as f64;
+        let node_count = self.nodes.len() as f64;
 
         if node_count > 0.0 {
-            let cpu_usage = nodes.iter().map(|n| n.cpu_usage).sum::<f64>() / node_count;
-            let used_memory = nodes.iter().map(|n| n.used_memory).sum();
-            let total_memory = nodes.iter().map(|n| n.total_memory).sum();
-            let mem_usage = if total_memory > 0 {
-                (used_memory as f64 * 100.0) / total_memory as f64
+            // Average CPU usage percentages across nodes (no per-CPU performance info available)
+            self.total_cpu_usage = self.nodes.iter().map(|n| n.cpu_usage).sum::<f64>() / node_count;
+
+            // Calculate memory usage from actual memory values (nodes have different memory sizes)
+            self.total_used_memory = self.nodes.iter().map(|n| n.used_memory).sum();
+            self.total_memory = self.nodes.iter().map(|n| n.total_memory).sum();
+            self.total_mem_usage = if self.total_memory > 0 {
+                (self.total_used_memory as f64 * 100.0) / self.total_memory as f64
             } else {
                 0.0
             };
-
-            let cpu_count = nodes.iter().map(|n| n.cpu_count).sum();
-            let gpu_count = nodes.iter().map(|n| n.gpu_count).sum();
-            let rx_bytes = nodes.iter().map(|n| n.rx_bytes).sum();
-            let tx_bytes = nodes.iter().map(|n| n.tx_bytes).sum();
-            let read_bytes = nodes.iter().map(|n| n.read_bytes).sum();
-            let write_bytes = nodes.iter().map(|n| n.write_bytes).sum();
-
-            (
-                cpu_usage,
-                mem_usage,
-                used_memory,
-                total_memory,
-                cpu_count,
-                gpu_count,
-                rx_bytes,
-                tx_bytes,
-                read_bytes,
-                write_bytes,
-            )
         } else {
-            (0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0)
+            self.total_cpu_usage = 0.0;
+            self.total_mem_usage = 0.0;
+            self.total_used_memory = 0;
+            self.total_memory = 0;
         }
-    }
-}
 
-impl AggregatedMetrics for SocInfo {
-    fn get_nodes(&self) -> &Vec<NodeInfo> {
-        &self.nodes
-    }
-}
-
-impl AggregatedMetrics for BoardInfo {
-    fn get_nodes(&self) -> &Vec<NodeInfo> {
-        &self.nodes
+        // Sum absolute values across nodes
+        self.total_cpu_count = self.nodes.iter().map(|n| n.cpu_count).sum();
+        self.total_gpu_count = self.nodes.iter().map(|n| n.gpu_count).sum();
+        self.total_rx_bytes = self.nodes.iter().map(|n| n.rx_bytes).sum();
+        self.total_tx_bytes = self.nodes.iter().map(|n| n.tx_bytes).sum();
+        self.total_read_bytes = self.nodes.iter().map(|n| n.read_bytes).sum();
+        self.total_write_bytes = self.nodes.iter().map(|n| n.write_bytes).sum();
     }
 }
