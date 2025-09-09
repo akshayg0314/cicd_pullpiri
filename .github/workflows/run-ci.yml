@@ -6,7 +6,7 @@ on:
 
 jobs:
   rust_ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04  # Use older Ubuntu for glibc compatibility
 
     steps:
       # Step 1: Checkout the code
@@ -59,12 +59,14 @@ jobs:
         run: |
           echo "Building nodeagent (dynamic) from src/agent/nodeagent directory..."
           cd src/agent/nodeagent
-          cargo build --release  # Removes --target flag for default glibc build
+          cargo build --release  # Dynamic build with older glibc
           cd ../../../
           cp src/agent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
           ls -la dist/binaries/
           file dist/binaries/nodeagent-linux-amd64
           ldd dist/binaries/nodeagent-linux-amd64  # Shows dynamic dependencies
+          echo "Built with glibc version:"
+          ldd --version
 
       # Step 9: Run all Rust unit/integration tests and generate reports
       - name: Run tests and generate report
