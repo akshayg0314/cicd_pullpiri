@@ -4,21 +4,44 @@ SPDX-FileCopyrightText: Copyright 2024 LG Electronics Inc.
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# PULLPIRI Tools
+# PULLPIRI Structures
 
-These are tools that helps in the development of `Pullpiri`.
+(under construction)
 
-## idl2rs
+For `Pullpiri` build, try following in the project root folder
 
-In order to use DDS, you need to use the same IDL files on both pub/sub sides.
-This tool makes it easy to convert IDL files to rust `.rs` files.
+```bash
+# in pullpiri folder
+make image
+```
 
-## ppr
+## server
 
-This is a CLI tool that provides access to the Pullpiri apiserver.
+only 1 node
 
-## yamlvalidator
+1. apiserver
+1. policymanager
+1. monitoringserver
+1. etcd
 
-In order for Pullpiri to work, it is necessary to generate the correct resource
-files in yaml. This tool allows you to determine if a created yaml is valid
-inside Pullpiri.
+## player
+
+only 1 node (server + player can be located in 1 node)
+
+1. filtergateway
+1. actioncontroller
+1. statemanager
+
+## agent
+
+all nodes
+
+1. nodeagent
+
+## common
+
+common resources like gRPC proto, pullpiri artifact, ...
+
+## tools
+
+Additional tools will be added to aid development.
