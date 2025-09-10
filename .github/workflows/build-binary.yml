@@ -1,0 +1,64 @@
+name: Build Nodeagent Binary
+
+on:
+  workflow_call:
+    outputs:
+      binary-artifact:
+        description: "Name of the binary artifact"
+        value: ${{ jobs.build-binary.outputs.artifact-name }}
+  workflow_dispatch:
+
+jobs:
+  build-binary:
+    runs-on: ubuntu-latest
+    container: ubuntu:18.04  # Use container for old glibc
+    
+    outputs:
+      artifact-name: ${{ steps.upload.outputs.artifact-id }}
+    
+    steps:
+      # Manual checkout to avoid Node.js issues
+      - name: Install git and checkout
+        run: |
+          apt-get update
+          apt-get install -y git
+          git clone --depth=1 https://github.com/${{ github.repository }}.git .
+          git checkout ${{ github.sha }}
+
+      # Install dependencies
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y curl build-essential pkg-config libssl-dev libdbus-1-dev protobuf-compiler
+
+      # Install Rust
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo 'source ~/.cargo/env' >> ~/.bashrc
+          source ~/.cargo/env
+          rustup target add x86_64-unknown-linux-gnu
+
+      # Build binary
+      - name: Build nodeagent binary
+        run: |
+          source ~/.cargo/env
+          cd src/agent/nodeagent
+          cargo build --release --target x86_64-unknown-linux-gnu
+          cd ../../../
+          mkdir -p dist/binaries
+          cp src/agent/target/x86_64-unknown-linux-gnu/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          
+          # Show compatibility info
+          file dist/binaries/nodeagent-linux-amd64
+          ldd dist/binaries/nodeagent-linux-amd64
+          echo "Built with glibc:"
+          ldd --version
+
+      # Upload binary
+      - name: Upload binary
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodeagent-binary-ubuntu18
+          path: dist/binaries/nodeagent-linux-amd64
