@@ -6,28 +6,22 @@ on:
 
 jobs:
   rust_ci:
-    runs-on: ubuntu-latest
-    container: centos:7
+    runs-on: ubuntu-18.04
 
     steps:
       # Step 1: Checkout the code
       - name: Checkout repository
-        uses: actions/checkout@v3  # Changed from v4 to v3
+        uses: actions/checkout@v4
 
-      # Step 2: Install essential dependencies for CentOS 7
+      # Step 2: Install essential dependencies including protobuf-compiler and dbus
       - name: Install essential dependencies
         run: |
-          yum update -y
-          yum groupinstall -y "Development Tools"
-          yum install -y epel-release
-          yum install -y curl wget git protobuf-compiler protobuf-devel dbus-devel pkgconfig openssl-devel
+          sudo apt-get update -y
+          sudo apt-get install -y docker-compose jq curl lsb-release protobuf-compiler libdbus-1-dev pkg-config build-essential
 
       # Step 3: Install Rust toolchain
       - name: Install Rust toolchain
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source ~/.cargo/env
-          rustup target add x86_64-unknown-linux-gnu
+        uses: dtolnay/rust-toolchain@stable
 
       # Step 4: Make all scripts executable
       - name: Make scripts executable
@@ -56,24 +50,31 @@ jobs:
       - name: Build and parse project
         run: ./scripts/buildNparse.sh
 
-      # Step 7.5: Add musl target for static linking
-      - name: Add musl target
-        run: rustup target add x86_64-unknown-linux-musl
-
-      # Step 8: Build nodeagent binary for release (x86_64 dynamic with old glibc)
-      - name: Build nodeagent binary (x86_64 dynamic)
+      # Step 8: Build nodeagent binary for release (x86_64 only)
+      - name: Build nodeagent binary (x86_64)
         run: |
-          source ~/.cargo/env
-          echo "Building nodeagent (dynamic) from src/agent/nodeagent directory..."
+          echo "Building nodeagent from src/agent/nodeagent directory..."
+          
+          # Build from the nodeagent package directory
           cd src/agent/nodeagent
-          cargo build --release --target x86_64-unknown-linux-gnu
+          cargo build --release
+          
+          # Go back to project root
           cd ../../../
-          cp src/agent/target/x86_64-unknown-linux-gnu/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          
+          # The binary should be at src/agent/target/release/nodeagent (based on your output)
+          if [ -f "src/agent/target/release/nodeagent" ]; then
+            echo "Found binary at: src/agent/target/release/nodeagent"
+            cp src/agent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          else
+            echo "Binary not found, searching entire project..."
+            find . -name "nodeagent" -type f -executable
+            exit 1
+          fi
+          
+          # Verify binary was created
           ls -la dist/binaries/
           file dist/binaries/nodeagent-linux-amd64
-          ldd dist/binaries/nodeagent-linux-amd64
-          echo "Built with glibc version:"
-          ldd --version
 
       # Step 9: Run all Rust unit/integration tests and generate reports
       - name: Run tests and generate report
