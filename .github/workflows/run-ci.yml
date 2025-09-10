@@ -6,22 +6,28 @@ on:
 
 jobs:
   rust_ci:
-    runs-on: ubuntu-20.04  # Use older Ubuntu for glibc compatibility
+    runs-on: ubuntu-latest
+    container: centos:7
 
     steps:
       # Step 1: Checkout the code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Install essential dependencies including protobuf-compiler and dbus
+      # Step 2: Install essential dependencies for CentOS 7
       - name: Install essential dependencies
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y docker-compose jq curl lsb-release protobuf-compiler libdbus-1-dev pkg-config build-essential
+          yum update -y
+          yum groupinstall -y "Development Tools"
+          yum install -y epel-release
+          yum install -y curl wget git protobuf-compiler protobuf-devel dbus-devel pkgconfig openssl-devel
 
       # Step 3: Install Rust toolchain
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
+          rustup target add x86_64-unknown-linux-gnu
 
       # Step 4: Make all scripts executable
       - name: Make scripts executable
@@ -54,17 +60,18 @@ jobs:
       - name: Add musl target
         run: rustup target add x86_64-unknown-linux-musl
 
-      # Step 8: Build nodeagent binary for release (x86_64 dynamic)
+      # Step 8: Build nodeagent binary for release (x86_64 dynamic with old glibc)
       - name: Build nodeagent binary (x86_64 dynamic)
         run: |
+          source ~/.cargo/env
           echo "Building nodeagent (dynamic) from src/agent/nodeagent directory..."
           cd src/agent/nodeagent
-          cargo build --release  # Dynamic build with older glibc
+          cargo build --release --target x86_64-unknown-linux-gnu
           cd ../../../
-          cp src/agent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          cp src/agent/target/x86_64-unknown-linux-gnu/release/nodeagent dist/binaries/nodeagent-linux-amd64
           ls -la dist/binaries/
           file dist/binaries/nodeagent-linux-amd64
-          ldd dist/binaries/nodeagent-linux-amd64  # Shows dynamic dependencies
+          ldd dist/binaries/nodeagent-linux-amd64
           echo "Built with glibc version:"
           ldd --version
 
