@@ -12,7 +12,7 @@ jobs:
     steps:
       # Step 1: Checkout the code
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3  # Changed from v4 to v3
 
       # Step 2: Install essential dependencies for CentOS 7
       - name: Install essential dependencies
