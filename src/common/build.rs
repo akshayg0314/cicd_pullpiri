@@ -4,16 +4,11 @@
  */
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::configure()
-        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
-        .compile(&[
-            "proto/actioncontroller.proto",
-            "proto/filtergateway.proto", 
-            "proto/monitoringserver.proto",
-            "proto/nodeagent.proto",
-            "proto/policymanager.proto",
-            "proto/statemanager.proto",
-            "proto/pharos_service.proto",
-        ], &["proto"])?;
+    tonic_build::compile_protos("proto/actioncontroller.proto")?;
+    tonic_build::compile_protos("proto/filtergateway.proto")?;
+    tonic_build::compile_protos("proto/monitoringclient.proto")?;
+    tonic_build::compile_protos("proto/nodeagent.proto")?;
+    tonic_build::compile_protos("proto/policymanager.proto")?;
+    tonic_build::compile_protos("proto/statemanager.proto")?;
     Ok(())
 }

@@ -1,6 +1,5 @@
 mod model;
 mod network;
-mod node;
 mod package;
 mod scenario;
 mod volume;
@@ -44,14 +43,6 @@ pub struct Network {
     kind: String,
     metadata: MetaData,
     spec: Option<network::NetworkSpec>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Node {
-    apiVersion: String,
-    kind: String,
-    metadata: MetaData,
-    spec: Option<node::NodeSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -1,5 +1,5 @@
 use crate::filter::Filter;
-use crate::grpc::sender::actioncontroller::FilterGatewaySender;
+use crate::grpc::sender::FilterGatewaySender;
 use crate::vehicle::dds::DdsData;
 use crate::vehicle::VehicleManager;
 use common::spec::artifact::Scenario;
@@ -25,15 +25,15 @@ pub struct ScenarioParameter {
 
 pub struct FilterGatewayManager {
     /// Receiver for scenario information from gRPC
-    pub rx_grpc: Arc<Mutex<mpsc::Receiver<ScenarioParameter>>>,
+    rx_grpc: Arc<Mutex<mpsc::Receiver<ScenarioParameter>>>,
     /// Receiver for DDS data
-    pub rx_dds: Arc<Mutex<mpsc::Receiver<DdsData>>>,
+    rx_dds: Arc<Mutex<mpsc::Receiver<DdsData>>>,
     /// Active filters for scenarios
-    pub filters: Arc<Mutex<Vec<Filter>>>,
+    filters: Arc<Mutex<Vec<Filter>>>,
     /// gRPC sender for action controller
-    pub sender: Arc<Mutex<FilterGatewaySender>>,
+    sender: Arc<Mutex<FilterGatewaySender>>,
     /// Vehicle manager for handling vehicle data
-    pub vehicle_manager: Arc<Mutex<VehicleManager>>,
+    vehicle_manager: Arc<Mutex<VehicleManager>>,
 }
 
 impl FilterGatewayManager {
@@ -77,10 +77,7 @@ impl FilterGatewayManager {
     pub async fn initialize(&self) -> Result<()> {
         println!("FilterGatewayManager init");
         // Initialize vehicle manager
-        let etcd_scenario = Self::read_all_scenario_from_etcd()
-            .await
-            .unwrap_or_default();
-
+        let etcd_scenario = Self::read_all_scenario_from_etcd().await?;
         for scenario in etcd_scenario {
             let scenario: Scenario = serde_yaml::from_str(&scenario)?;
             println!("Scenario: {:?}", scenario);
@@ -103,7 +100,6 @@ impl FilterGatewayManager {
             }
             self.launch_scenario_filter(scenario).await?;
         }
-
         Ok(())
     }
 
@@ -125,13 +121,11 @@ impl FilterGatewayManager {
             // Receive DDS data
             match receiver.recv().await {
                 Some(dds_data) => {
-                    // Only print if topic or value is not empty
-                    if !dds_data.name.is_empty() && !dds_data.value.is_empty() {
-                        println!(
-                            "Received DDS data: topic={}, value={}",
-                            dds_data.name, dds_data.value
-                        );
-                    }
+                    // Log DDS data reception
+                    println!(
+                        "Received DDS data: topic={}, value={}",
+                        dds_data.name, dds_data.value
+                    );
 
                     // Forward data to all active filters
                     let mut filters = self.filters.lock().await;
@@ -273,18 +267,12 @@ impl FilterGatewayManager {
     ///
     /// * `Result<()>` - Success or error result
     pub async fn subscribe_vehicle_data(&self, vehicle_message: DdsData) -> Result<()> {
-        use std::time::Instant;
-        let start = Instant::now();
-
         println!("subscribe vehicle data {}", vehicle_message.name);
         println!("subscribe vehicle data {}", vehicle_message.value);
         let mut vehicle_manager = self.vehicle_manager.lock().await;
         vehicle_manager
             .subscribe_topic(vehicle_message.name, vehicle_message.value)
             .await?;
-
-        let elapsed = start.elapsed();
-        println!("subscribe_vehicle_data: elapsed = {:?}", elapsed);
 
         Ok(())
     }
@@ -324,16 +312,11 @@ impl FilterGatewayManager {
     ///
     /// * `Result<()>` - Success or error result
     pub async fn launch_scenario_filter(&self, scenario: Scenario) -> Result<()> {
-        use std::time::Instant;
-        let start = Instant::now();
-
         // Check if the scenario has conditions
         if scenario.get_conditions().is_none() {
             println!("No conditions for scenario: {}", scenario.get_name());
             let mut sender = self.sender.lock().await;
             sender.trigger_action(scenario.get_name().clone()).await?;
-            let elapsed = start.elapsed();
-            println!("launch_scenario_filter: elapsed = {:?}", elapsed);
             return Ok(());
         }
 
@@ -355,14 +338,10 @@ impl FilterGatewayManager {
                     "Filter for scenario '{}' already exists, skipping.",
                     filter.scenario_name
                 );
-                let elapsed = start.elapsed();
-                println!("launch_scenario_filter: elapsed = {:?}", elapsed);
                 return Ok(());
             }
             filters.push(filter);
         }
-        let elapsed = start.elapsed();
-        println!("launch_scenario_filter: elapsed = {:?}", elapsed);
         Ok(())
     }
 

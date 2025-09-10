@@ -1,11 +1,13 @@
 use std::{thread, time::Duration};
 
-use crate::{grpc::sender::pharos::request_network_pod, runtime::bluechi};
+use crate::runtime::bluechi;
 use common::{
-    actioncontroller::PodStatus as Status,
-    spec::artifact::{Network, Node, Package, Scenario},
+    actioncontroller::Status,
+    spec::artifact::{Package, Scenario},
     Result,
 };
+
+const SYSTEMD_PATH: &str = "/etc/containers/systemd/";
 
 /// Manager for coordinating scenario actions and workload operations
 ///
@@ -111,73 +113,49 @@ impl ActionControllerManager {
             )
         })?;
 
-        // To Do.. network, node yaml extract from etcd.
-        let etcd_network_key = format!("Network/{}", scenario_name);
-        let network_str = match common::etcd::get(&etcd_network_key).await {
-            Ok(value) => Some(value),
-            Err(_) => None,
-        };
-
-        let etcd_node_key = format!("Node/{}", scenario_name);
-        let node_str = match common::etcd::get(&etcd_node_key).await {
-            Ok(value) => Some(value),
-            Err(_) => None,
-        };
-
         for mi in package.get_models() {
             let model_name = format!("{}.service", mi.get_name());
             let model_node = mi.get_node();
             let node_type = if self.bluechi_nodes.contains(&model_node) {
-                println!("Node {} is bluechi", model_node);
                 "bluechi"
             } else if self.nodeagent_nodes.contains(&model_node) {
-                println!("Node {} is nodeagent", model_node);
                 "nodeagent"
             } else {
-                // Log warning for unknown node types and skip processing
-                println!(
-                    "Warning: Node '{}' is not explicitly configured. Skipping deployment.",
-                    model_node
-                );
-                continue;
+                continue; // Skip unknown node types
             };
-            println!(
-                "Processing model '{}' on node '{}' with action '{}'",
-                model_name, model_node, action
-            );
+
             match action.as_str() {
                 "launch" => {
-                    self.reload_all_node(&model_name, &model_node).await?;
                     self.start_workload(&model_name, &model_node, &node_type)
                         .await
                         .map_err(|e| format!("Failed to start workload '{}': {}", model_name, e))?;
-
-                    // If network and node are specified, request network pod to Pharos
-                    if network_str.is_some() && node_str.is_some() {
-                        request_network_pod(
-                            node_str.clone().unwrap(),
-                            scenario_name.to_string(),
-                            network_str.clone().unwrap(),
-                        )
-                        .await
-                        .map_err(|e| {
-                            format!("Failed to request network pod for '{}': {}", model_name, e)
-                        })?;
-                    }
                 }
                 "terminate" => {
-                    self.reload_all_node(&model_name, &model_node).await?;
                     self.stop_workload(&model_name, &model_node, &node_type)
                         .await
                         .map_err(|e| format!("Failed to stop workload '{}': {}", model_name, e))?;
                 }
                 "update" | "rollback" => {
-                    self.reload_all_node(&model_name, &model_node).await?;
                     self.stop_workload(&model_name, &model_node, &node_type)
                         .await
                         .map_err(|e| format!("Failed to stop workload '{}': {}", model_name, e))?;
 
-                    self.reload_all_node(&model_name, &model_node).await?;
+                    self.delete_symlink_and_reload(&mi.get_name(), &model_node)
+                        .await
+                        .map_err(|e| {
+                            format!("Failed to delete symlink for '{}': {}", mi.get_name(), e)
+                        })?;
+
+                    self.make_symlink_and_reload(
+                        &model_node,
+                        &mi.get_name(),
+                        &scenario.get_targets(),
+                    )
+                    .await
+                    .map_err(|e| {
+                        format!("Failed to create symlink for '{}': {}", mi.get_name(), e)
+                    })?;
+
                     self.start_workload(&model_name, &model_node, &node_type)
                         .await
                         .map_err(|e| format!("Failed to start workload '{}': {}", model_name, e))?;
@@ -255,12 +233,7 @@ impl ActionControllerManager {
             } else if self.nodeagent_nodes.contains(&model_node) {
                 "nodeagent"
             } else {
-                // Log warning for unknown node types and skip processing
-                println!(
-                    "Warning: Node '{}' is not explicitly configured. Skipping deployment.",
-                    model_node
-                );
-                continue;
+                continue; // Skip if node type is unknown
             };
 
             if desired == Status::Running {
@@ -453,6 +426,39 @@ impl ActionControllerManager {
         Ok(())
     }
 
+    pub async fn make_symlink_and_reload(
+        &self,
+        node_name: &str,
+        model_name: &str,
+        target_name: &str,
+    ) -> Result<()> {
+        println!(
+            "make_symlink_and_reload'{:?}' on host node '{:?}'",
+            model_name, node_name
+        );
+        let original: String = format!(
+            "{0}/{1}.kube",
+            common::setting::get_config().yaml_storage,
+            target_name
+        );
+        let link = format!("{}{}.kube", SYSTEMD_PATH, model_name);
+
+        if node_name == common::setting::get_config().host.name {
+            std::os::unix::fs::symlink(original, link)?;
+        }
+        self.reload_all_node(model_name, node_name).await?;
+        Ok(())
+    }
+
+    pub async fn delete_symlink_and_reload(&self, model_name: &str, node_name: &str) -> Result<()> {
+        // host node
+        let kube_symlink_path = format!("{}{}.kube", SYSTEMD_PATH, model_name);
+        let _ = std::fs::remove_file(&kube_symlink_path);
+
+        self.reload_all_node(model_name, node_name).await?;
+        Ok(())
+    }
+
     pub async fn reload_all_node(&self, model_name: &str, model_node: &str) -> Result<()> {
         let cmd = bluechi::BluechiCmd {
             command: bluechi::Command::ControllerReloadAllNodes,
@@ -468,7 +474,7 @@ impl ActionControllerManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manager::Status;
+    use common::actioncontroller::Status;
     use std::error::Error;
 
     #[tokio::test]
@@ -624,22 +630,5 @@ spec:
         assert!(manager.delete_workload("test".into()).await.is_ok());
         assert!(manager.restart_workload("test".into()).await.is_ok());
         assert!(manager.pause_workload("test".into()).await.is_ok());
-    }
-
-    #[test]
-    fn test_unknown_nodes_skipped() {
-        // Test that when creating a manager, unknown nodes are properly categorized
-        let manager = ActionControllerManager {
-            bluechi_nodes: vec!["HPC".to_string()],
-            nodeagent_nodes: vec!["ZONE".to_string()],
-        };
-
-        // Test that nodes are properly categorized
-        assert!(manager.bluechi_nodes.contains(&"HPC".to_string()));
-        assert!(manager.nodeagent_nodes.contains(&"ZONE".to_string()));
-        assert!(!manager.bluechi_nodes.contains(&"cloud".to_string()));
-
-        // The logic now skips unknown nodes instead of processing them
-        // This test validates that the manager is set up correctly
     }
 }

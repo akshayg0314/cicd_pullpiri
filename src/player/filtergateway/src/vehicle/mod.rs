@@ -60,16 +60,13 @@ impl VehicleManager {
         topic_name: String,
         data_type_name: String,
     ) -> Result<()> {
-        use std::time::Instant;
-        let start = Instant::now();
-
+        // TODO: Implementation
         self.dds_manager
             .create_typed_listener(topic_name, data_type_name)
             .await?;
-
-        let elapsed = start.elapsed();
-        println!("subscribe_topic: elapsed = {:?}", elapsed);
-
+        // self.dds_manager
+        //     .create_listener(topic_name, data_type_name)
+        //     .await?;
         Ok(())
     }
 

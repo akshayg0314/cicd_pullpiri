@@ -7,7 +7,6 @@
 
 use common::spec::k8s::Pod;
 use std::io::Write;
-const SYSTEMD_PATH: &str = "/etc/containers/systemd/";
 
 /// Make files about bluechi for Pod
 ///
@@ -15,47 +14,21 @@ const SYSTEMD_PATH: &str = "/etc/containers/systemd/";
 /// * `pods: Vec<Pod>` - Vector of pods
 /// ### Description
 /// Make `.kube`, `.yaml` files for bluechi
-pub async fn make_files_from_pod(pods: Vec<Pod>, node: String) -> common::Result<()> {
+pub async fn make_files_from_pod(pods: Vec<Pod>) -> common::Result<Vec<String>> {
     let storage_directory = &common::setting::get_config().yaml_storage;
     if !std::path::Path::new(storage_directory).exists() {
         std::fs::create_dir_all(storage_directory)?;
     }
+
+    let mut file_names: Vec<String> = Vec::new();
+
     for pod in pods {
+        file_names.push(pod.get_name());
         make_kube_file(storage_directory, &pod.get_name())?;
-        make_yaml_file(storage_directory, pod.clone())?;
-        delete_symlink(&pod.get_name())
-            .await
-            .map_err(|e| format!("Failed to delete symlink for '{}': {}", pod.get_name(), e))?;
-        make_symlink(&node, &pod.get_name())
-            .await
-            .map_err(|e| format!("Failed to create symlink for '{}': {}", pod.get_name(), e))?;
+        make_yaml_file(storage_directory, pod)?;
     }
-    Ok(())
-}
 
-pub async fn make_symlink(node_name: &str, model_name: &str) -> common::Result<()> {
-    println!(
-        "make_symlink_and_reload'{:?}' on host node '{:?}'",
-        model_name, node_name
-    );
-    let original: String = format!(
-        "{0}/{1}.kube",
-        common::setting::get_config().yaml_storage,
-        model_name
-    );
-    let link = format!("{}{}.kube", SYSTEMD_PATH, model_name);
-
-    std::os::unix::fs::symlink(original, link)?;
-
-    Ok(())
-}
-
-pub async fn delete_symlink(model_name: &str) -> common::Result<()> {
-    // host node
-    let kube_symlink_path = format!("{}{}.kube", SYSTEMD_PATH, model_name);
-    let _ = std::fs::remove_file(&kube_symlink_path);
-
-    Ok(())
+    Ok(file_names)
 }
 
 /// Make .kube files for Pod
@@ -107,15 +80,15 @@ fn make_yaml_file(dir: &str, pod: Pod) -> common::Result<()> {
     Ok(())
 }
 
-// (under construction) Copy Bluechi files to other nodes
-//
-// ### Parametets
-// TBD
-// ### Description
-// TBD
-/*pub fn copy_to_remote_node(file_names: Vec<String>) -> common::Result<()> {
+/// (under construction) Copy Bluechi files to other nodes
+///
+/// ### Parametets
+/// TBD
+/// ### Description
+/// TBD
+pub fn copy_to_remote_node(file_names: Vec<String>) -> common::Result<()> {
     Ok(())
-}*/
+}
 
 #[cfg(test)]
 mod tests {
@@ -123,7 +96,7 @@ mod tests {
     use common::spec::k8s::pod::PodSpec;
     use serde_yaml;
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     /// Returns a dummy PodSpec for testing
     fn dummy_podspec() -> PodSpec {
@@ -144,17 +117,12 @@ containers:
         let pod = Pod::new("antipinch-disable-core", podspec);
 
         let storage_dir = "/etc/piccolo/yaml";
-        let path = Path::new(storage_dir);
-        if !path.exists() {
-            fs::create_dir_all(path).expect("Failed to create directory");
-        }
-
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-        let result = make_files_from_pod(vec![pod.clone()], "node1".to_string()).await;
+        let result = make_files_from_pod(vec![pod.clone()]).await;
 
         match result {
-            Ok(_) => {
-                //assert_eq!(created_files, vec![pod.get_name()]);
+            Ok(created_files) => {
+                assert_eq!(created_files, vec![pod.get_name()]);
 
                 let kube_path = format!("{}/{}.kube", storage_dir, pod.get_name());
                 let yaml_path = format!("{}/{}.yaml", storage_dir, pod.get_name());
@@ -172,10 +140,7 @@ containers:
         }
         // Remove the directory to force re-creation
         if std::path::Path::new(storage_dir).exists() {
-            assert!(
-                std::fs::remove_dir_all(storage_dir).is_ok(),
-                "Failed to remove test directory"
-            );
+            std::fs::remove_dir_all(storage_dir).unwrap();
         }
     }
 
@@ -242,7 +207,7 @@ containers:
 
         assert!(Path::new(&yaml_path).exists(), "YAML file was not created");
 
-        let _content = fs::read_to_string(&yaml_path).expect("Failed to read YAML file");
+        let content = fs::read_to_string(&yaml_path).expect("Failed to read YAML file");
 
         // Clean up
         fs::remove_file(&yaml_path).expect("Failed to remove YAML file after test");

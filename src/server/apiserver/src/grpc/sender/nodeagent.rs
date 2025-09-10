@@ -1,21 +1,15 @@
 use common::nodeagent::{
-    connect_guest_server, connect_server, node_agent_connection_client::NodeAgentConnectionClient,
-    HandleYamlRequest, HandleYamlResponse,
+    connect_server, node_agent_connection_client::NodeAgentConnectionClient, HandleWorkloadRequest,
+    HandleWorkloadResponse,
 };
 use tonic::{Request, Response, Status};
 
-pub async fn send(action: HandleYamlRequest) -> Result<Response<HandleYamlResponse>, Status> {
+pub async fn send(
+    action: HandleWorkloadRequest,
+) -> Result<Response<HandleWorkloadResponse>, Status> {
     let mut client: NodeAgentConnectionClient<tonic::transport::Channel> =
         NodeAgentConnectionClient::connect(connect_server())
             .await
             .unwrap();
-    client.handle_yaml(Request::new(action)).await
-}
-
-pub async fn send_guest(action: HandleYamlRequest) -> Result<Response<HandleYamlResponse>, Status> {
-    let mut client: NodeAgentConnectionClient<tonic::transport::Channel> =
-        NodeAgentConnectionClient::connect(connect_guest_server())
-            .await
-            .unwrap();
-    client.handle_yaml(Request::new(action)).await
+    client.handle_workload(Request::new(action)).await
 }
