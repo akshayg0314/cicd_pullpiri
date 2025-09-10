@@ -5,12 +5,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-binary:
-    uses: ./.github/workflows/build-binary.yml
-
   rust_ci:
-    runs-on: ubuntu-latest  # Use latest for better availability
-    needs: build-binary
+    runs-on: ubuntu-20.04  # Good balance of compatibility and availability
 
     steps:
       # Step 1: Checkout the code
@@ -54,18 +50,21 @@ jobs:
       - name: Build and parse project
         run: ./scripts/buildNparse.sh
 
-      # Step 8: Download pre-built binary instead of building
-      - name: Download nodeagent binary
-        uses: actions/download-artifact@v4
-        with:
-          name: nodeagent-binary-ubuntu18
-          path: dist/binaries/
-
-      - name: Verify downloaded binary
+      # Step 8: Build nodeagent binary (ubuntu-20.04 gives good compatibility)
+      - name: Build nodeagent binary
         run: |
+          echo "Building nodeagent from src/agent/nodeagent directory..."
+          cd src/agent/nodeagent
+          cargo build --release
+          cd ../../../
+          cp src/agent/target/release/nodeagent dist/binaries/nodeagent-linux-amd64
+          
+          # Show compatibility info
           ls -la dist/binaries/
           file dist/binaries/nodeagent-linux-amd64
-          chmod +x dist/binaries/nodeagent-linux-amd64
+          ldd dist/binaries/nodeagent-linux-amd64
+          echo "Built with glibc:"
+          ldd --version
 
       # Step 9: Run all Rust unit/integration tests and generate reports
       - name: Run tests and generate report
