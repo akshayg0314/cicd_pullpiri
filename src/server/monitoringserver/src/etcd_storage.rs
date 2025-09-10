@@ -6,8 +6,8 @@
 //! Store and retrieve monitoring data in etcd
 
 use crate::data_structures::{BoardInfo, SocInfo};
-use serde::{Deserialize, Serialize};
 use common::monitoringserver::NodeInfo;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 struct SerializableNodeInfo {
@@ -75,7 +75,7 @@ pub async fn store_node_info(node_info: &NodeInfo) -> common::Result<()> {
     let serializable = SerializableNodeInfo::from(node_info);
     let json_data = serde_json::to_string(&serializable)
         .map_err(|e| format!("Failed to serialize NodeInfo: {}", e))?;
-    
+
     common::etcd::put(&key, &json_data).await?;
     println!("[ETCD] Stored NodeInfo for node: {}", node_info.node_name);
     Ok(())
@@ -86,7 +86,7 @@ pub async fn store_soc_info(soc_info: &SocInfo) -> common::Result<()> {
     let key = format!("monitoring/socs/{}", soc_info.soc_id);
     let json_data = serde_json::to_string(soc_info)
         .map_err(|e| format!("Failed to serialize SocInfo: {}", e))?;
-    
+
     common::etcd::put(&key, &json_data).await?;
     println!("[ETCD] Stored SocInfo for SoC: {}", soc_info.soc_id);
     Ok(())
@@ -97,7 +97,7 @@ pub async fn store_board_info(board_info: &BoardInfo) -> common::Result<()> {
     let key = format!("monitoring/boards/{}", board_info.board_id);
     let json_data = serde_json::to_string(board_info)
         .map_err(|e| format!("Failed to serialize BoardInfo: {}", e))?;
-    
+
     common::etcd::put(&key, &json_data).await?;
     println!("[ETCD] Stored BoardInfo for board: {}", board_info.board_id);
     Ok(())
@@ -107,10 +107,10 @@ pub async fn store_board_info(board_info: &BoardInfo) -> common::Result<()> {
 pub async fn get_node_info(node_name: &str) -> common::Result<NodeInfo> {
     let key = format!("monitoring/nodes/{}", node_name);
     let json_data = common::etcd::get(&key).await?;
-    
+
     let serializable: SerializableNodeInfo = serde_json::from_str(&json_data)
         .map_err(|e| format!("Failed to deserialize NodeInfo: {}", e))?;
-    
+
     Ok(NodeInfo::from(serializable))
 }
 
@@ -118,10 +118,10 @@ pub async fn get_node_info(node_name: &str) -> common::Result<NodeInfo> {
 pub async fn get_soc_info(soc_id: &str) -> common::Result<SocInfo> {
     let key = format!("monitoring/socs/{}", soc_id);
     let json_data = common::etcd::get(&key).await?;
-    
+
     let soc_info: SocInfo = serde_json::from_str(&json_data)
         .map_err(|e| format!("Failed to deserialize SocInfo: {}", e))?;
-    
+
     Ok(soc_info)
 }
 
@@ -129,32 +129,33 @@ pub async fn get_soc_info(soc_id: &str) -> common::Result<SocInfo> {
 pub async fn get_board_info(board_id: &str) -> common::Result<BoardInfo> {
     let key = format!("monitoring/boards/{}", board_id);
     let json_data = common::etcd::get(&key).await?;
-    
+
     let board_info: BoardInfo = serde_json::from_str(&json_data)
         .map_err(|e| format!("Failed to deserialize BoardInfo: {}", e))?;
-    
+
     Ok(board_info)
 }
 
 /// Get all nodes from etcd
 pub async fn get_all_nodes() -> common::Result<Vec<NodeInfo>> {
     let kv_pairs = common::etcd::get_all_with_prefix("monitoring/nodes/").await?;
-    
+
     let mut nodes = Vec::with_capacity(kv_pairs.len()); // Pre-allocate
     for kv in kv_pairs {
-        match serde_json::from_str::<SerializableNodeInfo>(&kv.value) { // Use SerializableNodeInfo
+        match serde_json::from_str::<SerializableNodeInfo>(&kv.value) {
+            // Use SerializableNodeInfo
             Ok(serializable) => nodes.push(NodeInfo::from(serializable)),
             Err(e) => eprintln!("[ETCD] Failed to deserialize node {}: {}", kv.key, e),
         }
     }
-    
+
     Ok(nodes)
 }
 
 /// Get all SoCs from etcd
 pub async fn get_all_socs() -> common::Result<Vec<SocInfo>> {
     let kv_pairs = common::etcd::get_all_with_prefix("monitoring/socs/").await?;
-    
+
     let mut socs = Vec::new();
     for kv in kv_pairs {
         match serde_json::from_str::<SocInfo>(&kv.value) {
@@ -162,14 +163,14 @@ pub async fn get_all_socs() -> common::Result<Vec<SocInfo>> {
             Err(e) => eprintln!("[ETCD] Failed to deserialize SoC {}: {}", kv.key, e),
         }
     }
-    
+
     Ok(socs)
 }
 
 /// Get all boards from etcd
 pub async fn get_all_boards() -> common::Result<Vec<BoardInfo>> {
     let kv_pairs = common::etcd::get_all_with_prefix("monitoring/boards/").await?;
-    
+
     let mut boards = Vec::new();
     for kv in kv_pairs {
         match serde_json::from_str::<BoardInfo>(&kv.value) {
@@ -177,7 +178,7 @@ pub async fn get_all_boards() -> common::Result<Vec<BoardInfo>> {
             Err(e) => eprintln!("[ETCD] Failed to deserialize board {}: {}", kv.key, e),
         }
     }
-    
+
     Ok(boards)
 }
 

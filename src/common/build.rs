@@ -6,14 +6,17 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
-        .compile(&[
-            "proto/actioncontroller.proto",
-            "proto/filtergateway.proto", 
-            "proto/monitoringserver.proto",
-            "proto/nodeagent.proto",
-            "proto/policymanager.proto",
-            "proto/statemanager.proto",
-            "proto/pharos_service.proto",
-        ], &["proto"])?;
+        .compile(
+            &[
+                "proto/actioncontroller.proto",
+                "proto/filtergateway.proto",
+                "proto/monitoringserver.proto",
+                "proto/nodeagent.proto",
+                "proto/policymanager.proto",
+                "proto/statemanager.proto",
+                "proto/pharos_service.proto",
+            ],
+            &["proto"],
+        )?;
     Ok(())
 }
